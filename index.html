@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="is">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>bel-meteogram — dev</title>
+  <style>
+    body {
+      margin: 0;
+      background: #E7EFF7;
+      font-family: 'Nunito', system-ui, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      color: #16324A;
+    }
+    .page {
+      max-width: 1120px;
+      margin: 0 auto;
+      min-height: 100vh;
+      padding: 14px 16px 30px;
+      box-sizing: border-box;
+    }
+    .inner { padding: 0 16px; }
+    h1 { font-size: 23px; font-weight: 900; letter-spacing: -0.5px; margin: 0 0 2px; }
+    h2 { font-size: 15px; font-weight: 900; margin: 26px 0 8px; }
+    .sub { font-size: 13px; font-weight: 700; color: #6E8BA3; margin-bottom: 8px; }
+    .row { display: flex; gap: 8px; margin: 16px 0; }
+    button {
+      border: none;
+      border-radius: 13px;
+      padding: 12px 16px;
+      min-height: 44px;
+      font-family: inherit;
+      font-size: 15px;
+      font-weight: 800;
+      color: #16324A;
+      background: #ffffff;
+      box-shadow: 0 1px 3px rgba(22,50,74,0.12);
+      cursor: pointer;
+    }
+    .note { font-size: 12px; font-weight: 700; color: #8CA3B8; margin-top: 20px; }
+
+    /* Map-panel 2a demo — bounded map host for the draggable widget */
+    .map-host {
+      position: relative;
+      width: 100%;
+      max-width: 1120px;
+      height: 840px;
+      margin: 0 auto 40px;
+      border-radius: 22px;
+      overflow: hidden;
+      background: #7FB84A;
+      box-shadow: 0 20px 60px rgba(13, 30, 45, 0.22);
+    }
+    .map-host::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(90deg, rgba(13,30,45,0) 55%, rgba(13,30,45,0.10) 100%);
+      pointer-events: none;
+    }
+    .map-host bel-meteogram {
+      --bel-meteogram-bg: rgba(255, 255, 255, 0.95);
+      --bel-meteogram-backdrop: blur(10px);
+      --bel-meteogram-radius: 22px;
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="inner">
+      <h1>bel-meteogram</h1>
+      <div class="sub">dev page — live API (Reykjavík, island-9)</div>
+      <h2>mode="full" @ ≥900px — map panel 2a (draggable, yr-style graph)</h2>
+    </div>
+
+    <div class="map-host">
+      <bel-meteogram
+        id="map-panel"
+        mode="full"
+        closable
+        sample
+        language="en"
+        hours="48"
+        view="graph"
+      ></bel-meteogram>
+    </div>
+
+    <div class="inner">
+      <h2>mode="full" — mobile sheet (&lt;900px)</h2>
+    </div>
+
+    <bel-meteogram
+      id="full"
+      mode="full"
+      client-name="demo"
+      api-url="https://wod-odinn.belgingur.is/api/v2/widget/meteo/config/demo"
+      forecast-type="schedule"
+      forecast-name="island-9"
+      domain="1"
+      location-lat="64.1465"
+      location-lon="-21.9426"
+      hours="48"
+      language="is"
+    ></bel-meteogram>
+
+    <div class="inner">
+      <h2>mode="graph" (default) — the meteogram card only</h2>
+
+      <bel-meteogram
+        id="graph"
+        client-name="demo"
+        api-url="https://wod-odinn.belgingur.is/api/v2/widget/meteo/config/demo"
+        forecast-type="schedule"
+        forecast-name="island-9"
+        domain="1"
+        location-lat="64.1465"
+        location-lon="-21.9426"
+        hours="48"
+        language="is"
+      ></bel-meteogram>
+
+      <div class="row">
+        <button id="open-sheet">Open as bottom sheet</button>
+        <button id="toggle-lang">IS/EN</button>
+      </div>
+
+      <div class="note">
+        Embedding on another site: load <code>dist/bel-meteogram.js</code> and use the same
+        attributes; add <code>mode="full"</code> for the landing experience (now card,
+        table, graph, settings). Set <code>api-url</code> when the script is hosted on a
+        different origin than the WOD API.
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { BelMeteogram } from "/src/bel-meteogram.ts";
+
+    document.getElementById("open-sheet").addEventListener("click", () => {
+      const el = document.getElementById("graph");
+      BelMeteogram.openSheet({
+        title: "Reykjavík",
+        attributes: {
+          "client-name": el.getAttribute("client-name") ?? "demo",
+          "api-url": el.getAttribute("api-url") ?? "",
+          "forecast-type": el.getAttribute("forecast-type") ?? "schedule",
+          "forecast-name": el.getAttribute("forecast-name") ?? "island-9",
+          domain: el.getAttribute("domain") ?? "1",
+          "location-lat": el.getAttribute("location-lat") ?? "64.1465",
+          "location-lon": el.getAttribute("location-lon") ?? "-21.9426",
+          hours: el.getAttribute("hours") ?? "48",
+          language: el.getAttribute("language") ?? "is",
+        },
+      });
+    });
+
+    document.getElementById("toggle-lang").addEventListener("click", () => {
+      for (const el of document.querySelectorAll("bel-meteogram")) {
+        el.setAttribute("language", el.getAttribute("language") === "is" ? "en" : "is");
+      }
+    });
+  </script>
+</body>
+</html>

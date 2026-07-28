@@ -1,0 +1,17 @@
+{
+  "name": "bel-meteogram",
+  "version": "0.1.0",
+  "description": "Belgingur meteogram widget — mobile-first redesign (Mimir handoff). Framework-agnostic web component, embeddable inline or as a bottom sheet.",
+  "type": "module",
+  "main": "dist/bel-meteogram.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^5.6.3",
+    "vite": "^7.1.12"
+  }
+}

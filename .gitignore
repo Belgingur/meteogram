@@ -1,0 +1,12 @@
+node_modules
+dist
+.DS_Store
+
+# IDEs & editors
+.idea/
+.vscode/
+
+# design tooling (local only, not part of the public widget)
+.ds-sync/
+ds-bundle/
+.design-sync/
