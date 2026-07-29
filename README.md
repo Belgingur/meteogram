@@ -28,8 +28,8 @@ modes:
 
 Compared to the previous Belgingur meteogram widget (Lit + Vega + Leaflet),
 this build is vanilla TypeScript with a hand-built SVG renderer and no runtime
-dependencies. Everything — styles and the production yr.no-style weather symbol
-set — is inlined into **one JS file** (~44 kB gzipped).
+dependencies. Everything — styles and the Yr weather symbol set — is inlined
+into **one JS file** (~44 kB gzipped).
 
 ## Design spec highlights
 
@@ -227,9 +227,41 @@ src/
   graph-card.ts      graph card: readout, lane chips, legend, scrub wiring
   landing.ts         full mode: now card, day list/chips, day detail, overlay
   symbol-code.ts     weather-variable → yr.no symbol code
-  symbols.ts         symbol code → inlined SVG asset
+  symbols.ts         symbol code → inlined SVG asset (see Licence below)
   i18n.ts            is/en strings
   styles.ts          card + landing + sheet CSS (handoff design tokens)
   sample.ts          generated sample data for dev/design review
-  assets/symbols/    production yr.no-style symbol set
+  assets/symbols/    Yr weather symbols, CC BY 4.0 (see Licence below)
 ```
+
+## Licence
+
+The component source is **MIT licensed** — see [LICENSE](LICENSE).
+
+The weather symbols in `src/assets/symbols/` are **not** ours and are not
+covered by that MIT grant. They are Yr weather symbols © 2015 Yr/NRK, licensed
+under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), and we have
+modified them: re-exported to flatten the `<symbol>`/`<use>` structure, swapped
+the raster shading textures for SVG gradients, and renamed the files to the
+legacy numeric symbol codes (`01d` … `50`) that our forecast pipeline emits.
+The originals are at [nrkno/yr-weather-symbols][yr].
+
+Note that MET Norway's mirror at [metno/weathericons][metno] still documents
+these icons as MIT. That is out of date — upstream relicensed from MIT to
+CC BY 4.0 on 2023-09-25. Treat the [upstream LICENSE][yr-license] as
+authoritative.
+
+Because the build inlines the symbols as data URLs, the attribution ships
+inside `dist/bel-meteogram.js` as a `/*! */` banner (configured in
+`vite.config.ts`). **Keep that banner intact** when redistributing the bundle —
+it is what satisfies the CC BY attribution requirement for consumers who
+receive only the one file.
+
+CC BY 4.0 permits commercial use and adaptation, but forbids implying
+endorsement. Do not present the widget as affiliated with, or endorsed by,
+Yr, NRK or MET Norway, and do not use their names or logos as branding.
+Crediting the artwork is not a partnership.
+
+[yr]: https://github.com/nrkno/yr-weather-symbols
+[yr-license]: https://github.com/nrkno/yr-weather-symbols/blob/master/LICENSE
+[metno]: https://github.com/metno/weathericons

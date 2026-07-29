@@ -1,3 +1,10 @@
+The MIT licence below covers the bel-meteogram source code. It does NOT cover
+the weather symbol artwork in src/assets/symbols/, which is third-party
+material under a different licence — see "Third-party assets" at the end of
+this file.
+
+-----------------------------------------------------------------------
+
 MIT License
 
 Copyright (c) 2026 Belgingur
@@ -19,3 +26,29 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+-----------------------------------------------------------------------
+
+Third-party assets
+==================
+
+src/assets/symbols/*.svg  (and the copies inlined into dist/bel-meteogram.js)
+
+  Yr weather symbols
+  Copyright (c) 2015 Yr/NRK
+  Licensed under the Creative Commons Attribution 4.0 International licence
+  (CC BY 4.0): https://creativecommons.org/licenses/by/4.0/
+
+  Source: https://github.com/nrkno/yr-weather-symbols
+
+  Changes made by Belgingur: re-exported to flatten the <symbol>/<use>
+  structure into standalone SVG documents, raster shading textures replaced
+  with SVG gradients, and files renamed to the legacy numeric symbol codes
+  ("01d" ... "50") emitted by our forecast pipeline.
+
+  These files are used under CC BY 4.0 and are not relicensed under the MIT
+  licence above. Redistribution must retain this attribution, including the
+  /*! */ banner in dist/bel-meteogram.js.
+
+  Nothing here implies that Belgingur, or bel-meteogram, is affiliated with
+  or endorsed by Yr, NRK or MET Norway.
