@@ -383,8 +383,9 @@ export function buildMeteogram(
     }
   }
 
-  // Wind direction arrows every 3 h (rotated to where the wind blows toward
-  // = meteorological direction + 180°)
+  // Wind direction arrows every 3 h, pointing to where the wind blows toward.
+  // The glyph is drawn tip-down (= pointing south at rotate(0)), so the
+  // meteorological from-direction is the rotation: a wind from 0° blows south.
   const ah = L.arrowHalf;
   const k = ah / 7; // scale the arrowhead with the shaft
   const head = `M${(-4 * k).toFixed(1)} ${(2 * k).toFixed(1)} L0 ${(7.5 * k).toFixed(1)} L${(4 * k).toFixed(1)} ${(2 * k).toFixed(1)}`;
@@ -392,7 +393,7 @@ export function buildMeteogram(
     const dir = points[i].dirDeg;
     if (dir !== null) {
       parts.push(
-        `<g transform="translate(${cx(i)} ${L.arrowY}) rotate(${(dir + 180) % 360})">` +
+        `<g transform="translate(${cx(i)} ${L.arrowY}) rotate(${((dir % 360) + 360) % 360})">` +
           `<line x1="0" y1="${-ah}" x2="0" y2="${ah}" stroke="#6B7A86" stroke-width="2" stroke-linecap="round"/>` +
           `<path d="${head}" fill="none" stroke="#6B7A86" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>` +
           `</g>`,

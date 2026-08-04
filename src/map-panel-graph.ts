@@ -423,6 +423,8 @@ function buildPlotSvg(
     `<path d="${linePath(points, (p) => p.windMs, cx, wy)}" fill="none" stroke="#3E8E63" stroke-width="${L.windStroke}" stroke-linecap="round" stroke-linejoin="round"/>`,
   );
 
+  // Tip-down glyph (points south at rotate(0)), so the meteorological
+  // from-direction is the rotation: a wind from 0° blows toward the south.
   const ah = L.colW >= 40 ? 7 : 6;
   const head = L.colW >= 40 ? `M-4 2 L0 7.5 L4 2` : `M-3.5 1.8 L0 6.5 L3.5 1.8`;
   const arrowRow = windArrowY(L);
@@ -430,7 +432,7 @@ function buildPlotSvg(
     const dir = points[i].dirDeg;
     if (dir !== null) {
       parts.push(
-        `<g transform="translate(${cx(i)} ${arrowRow}) rotate(${(dir + 180) % 360})">` +
+        `<g transform="translate(${cx(i)} ${arrowRow}) rotate(${((dir % 360) + 360) % 360})">` +
           `<line x1="0" y1="-${ah}" x2="0" y2="${ah}" stroke="#6B7A86" stroke-width="2" stroke-linecap="round"/>` +
           `<path d="${head}" fill="none" stroke="#6B7A86" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>` +
           `</g>`,
