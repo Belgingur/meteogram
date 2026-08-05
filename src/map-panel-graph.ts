@@ -5,7 +5,19 @@ import {
   scrubTimeLabel,
   windText,
 } from "./graph-card";
-import { esc, hasGustSeries, temperatureTicks } from "./render";
+import {
+  esc,
+  formatPrecipTick,
+  formatTempTick,
+  formatWindTick,
+  hasGustSeries,
+  PRECIP_TICK_COLOR,
+  PRECIP_TICKS,
+  temperatureTicks,
+  TICK_COLOR,
+  TICK_LABEL_DY,
+  windTicksFor,
+} from "./render";
 import { symbolUrl } from "./symbols";
 import type { HourPoint } from "./types";
 
@@ -29,6 +41,7 @@ interface YrLayout {
   windTop: number;
   windBase: number;
   windMax: number;
+  /** Filled by resolveYrLayout from the lane height (shared tick rule) */
   windTicks: number[];
   precipBase: number;
   precipPerMm: number;
@@ -231,7 +244,15 @@ function yrTempScale(
 function resolveYrLayout(base: YrLayout, points: HourPoint[]): YrLayout {
   const maxLabels = base.colW >= 40 ? 8 : 6;
   const { lo, hi, ticks } = yrTempScale(points, maxLabels);
-  return { ...base, tempLo: lo, tempHi: hi, tempTicks: ticks };
+  return {
+    ...base,
+    tempLo: lo,
+    tempHi: hi,
+    tempTicks: ticks,
+    // Derived from the shared tick rule rather than hardcoded per layout, so the
+    // wind scale reads the same here as on the mobile chart.
+    windTicks: windTicksFor(base.windMax, base.windBase - base.windTop),
+  };
 }
 
 function tempSpan(L: YrLayout): number {
@@ -256,13 +277,17 @@ function buildAxisSvg(L: YrLayout, fullscreen: boolean): string {
   ];
   const ax = L.axisW - 5;
   for (const v of L.tempTicks) {
-    parts.push(text(ax, ty(v) + 3.5, `${v}°`, "#94A2AC", fullscreen ? 11 : 9.5, 700, "end"));
+    parts.push(
+      text(ax, ty(v) + TICK_LABEL_DY, formatTempTick(v), TICK_COLOR, fullscreen ? 11 : 9.5, 700, "end"),
+    );
   }
   // Precip shares the temperature baseline, so numeric precip ticks in this
   // gutter would collide with the temp labels. The bars are read relative to
   // the legend + the exact mm in the scrub readout instead.
   for (const v of L.windTicks) {
-    parts.push(text(ax, wy(v) + 3.5, `${v}`, "#94A2AC", fullscreen ? 11 : 9.5, 700, "end"));
+    parts.push(
+      text(ax, wy(v) + TICK_LABEL_DY, formatWindTick(v), TICK_COLOR, fullscreen ? 11 : 9.5, 700, "end"),
+    );
   }
   // No rotated "Hiti (°C)" / "Vindur (m/s)" axis titles: they only rendered in
   // the expanded view, making it the odd one out. The lane chips + legend name
@@ -283,9 +308,17 @@ function buildRightAxisSvg(L: YrLayout, fullscreen: boolean): string {
   const parts: string[] = [
     `<rect x="0" y="0" width="${rightW}" height="${L.height}" fill="#fff"/>`,
   ];
-  for (const mm of [1, 2]) {
+  for (const mm of PRECIP_TICKS) {
     parts.push(
-      text(5, L.precipBase - ph(mm) + 3.5, `${mm}`, "#3D82C4", size, 700, "start"),
+      text(
+        5,
+        L.precipBase - ph(mm) + TICK_LABEL_DY,
+        formatPrecipTick(mm),
+        PRECIP_TICK_COLOR,
+        size,
+        700,
+        "start",
+      ),
     );
   }
   return `<svg class="yr-axis-right" width="${rightW}" height="${L.height}" viewBox="0 0 ${rightW} ${L.height}" style="display:block;flex:none">${parts.join("")}</svg>`;
@@ -335,7 +368,7 @@ function buildPlotSvg(
     );
   }
   // Faint dashed precip gridlines (mm) so the right-hand precip scale is readable.
-  for (const mm of [1, 2]) {
+  for (const mm of PRECIP_TICKS) {
     const y = L.precipBase - ph(mm);
     parts.push(
       `<line x1="0" x2="${width}" y1="${y}" y2="${y}" stroke="#CFE0F1" stroke-width="1" stroke-dasharray="2 3"/>`,

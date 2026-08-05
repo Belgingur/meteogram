@@ -6,6 +6,13 @@ import type { HourPoint } from "./types";
  * SVG meteogram — stacked, labelled data lanes sharing one hour axis. Fixed
  * px-per-hour, never shrinks to fit; the card scrolls horizontally instead.
  *
+ * The value axes are NOT part of the scrolling plot: `buildMeteogram` returns
+ * them as two separate SVG strips (temperature + wind on the left, precipitation
+ * on the right) that the caller mounts as pinned flex siblings of the scroller,
+ * matching the desktop `.yr-chart` structure in map-panel-graph.ts. Both strips
+ * are positioned with the very same scale closures as the plot's gridlines, so
+ * labels and gridlines cannot drift apart at any scroll offset.
+ *
  * Two geometries, selected via the `layout` argument:
  *   LAYOUT_FULL (Mimir mobile handoff v3) — 34px/h, height 358, a horizontal
  *     scrub track between the symbol row and the temp lane.
@@ -40,8 +47,12 @@ export interface MeteogramLayout {
   arrowY: number;
   arrowHalf: number;
   hourLabelY: number;
-  gridX1: number;
-  axisX: number;
+  /** Width of the pinned left axis strip (temperature + wind ticks) */
+  axisW: number;
+  /** Width of the pinned right axis strip (precipitation ticks) */
+  rightAxisW: number;
+  /** Tick-label inset from the strip edge that faces the plot */
+  axisInset: number;
   axisFont: number;
   dayFont: number;
   tempFont: number;
@@ -60,7 +71,9 @@ export interface MeteogramLayout {
 
 export const LAYOUT_FULL: MeteogramLayout = {
   colW: 34,
-  padL: 36,
+  // The value axes are pinned strips outside the scroller, so the plot needs no
+  // left gutter of its own; `padL` is a plain leading pad and stays 0.
+  padL: 0,
   padR: 14,
   height: 358,
   tempTop: 44,
@@ -83,8 +96,9 @@ export const LAYOUT_FULL: MeteogramLayout = {
   arrowY: 322,
   arrowHalf: 7,
   hourLabelY: 350,
-  gridX1: 30,
-  axisX: 6,
+  axisW: 30,
+  rightAxisW: 22,
+  axisInset: 5,
   axisFont: 10,
   dayFont: 11,
   tempFont: 11,
@@ -101,7 +115,7 @@ export const LAYOUT_FULL: MeteogramLayout = {
 
 export const LAYOUT_COMPACT: MeteogramLayout = {
   colW: 27,
-  padL: 32,
+  padL: 0,
   padR: 12,
   height: 252,
   tempTop: 30,
@@ -124,8 +138,9 @@ export const LAYOUT_COMPACT: MeteogramLayout = {
   arrowY: 240,
   arrowHalf: 6,
   hourLabelY: 250,
-  gridX1: 28,
-  axisX: 5,
+  axisW: 28,
+  rightAxisW: 20,
+  axisInset: 5,
   axisFont: 9.5,
   dayFont: 10.5,
   tempFont: 10,
@@ -139,10 +154,6 @@ export const LAYOUT_COMPACT: MeteogramLayout = {
   dotTempR: 4,
   dotWindR: 3.6,
 };
-
-// Back-compat exports (previously module constants; now the full layout's)
-export const COL_W = LAYOUT_FULL.colW;
-export const PAD_L = LAYOUT_FULL.padL;
 
 /** Whether the wind-gust series carries any data. Datasets without a gust
  *  variable (e.g. ECMWF-IS) yield all-null gustMs; the gust line + legend entry
@@ -193,6 +204,69 @@ function linePath(
   return path.trim();
 }
 
+/* ── Axis ticks: the single source of tick values, units and formatting ─────
+   Shared by BOTH chart renderers (this module's mobile meteogram and the
+   desktop yr chart in map-panel-graph.ts) so a scale never reads differently
+   between the two. Each renderer still owns its own y-domains and geometry —
+   only the tick values and their text come from here. */
+
+/** Tick label colours */
+export const TICK_COLOR = "#94A2AC";
+export const PRECIP_TICK_COLOR = "#3D82C4";
+
+/** Precipitation tick + gridline values, in mm */
+export const PRECIP_TICKS: readonly number[] = [1, 2];
+
+/**
+ * Baseline offset that drops a tick label onto its gridline: SVG text sits on
+ * its baseline, so half the cap height has to be added back to centre it.
+ */
+export const TICK_LABEL_DY = 3.5;
+
+/** Minimum vertical gap between wind tick labels before they read as crowded */
+const WIND_TICK_MIN_GAP = 20;
+
+/** A step reads as round on a m/s scale: 1, 2, or a whole multiple of 5 */
+function isRoundStep(step: number): boolean {
+  return Number.isInteger(step) && (step <= 2 || step % 5 === 0);
+}
+
+/**
+ * Wind tick values for a 0…`max` lane that is `lanePx` tall: cut the lane into
+ * as many equal intervals as still clear {@link WIND_TICK_MIN_GAP}, keeping the
+ * step round. A short mobile lane gets [10, 20] where a tall desktop one gets
+ * [5, 10, 15, 20] — one rule instead of per-layout hardcoded tick arrays.
+ *
+ * Subdividing `max` (rather than counting a fixed step ladder upwards) is what
+ * keeps the top tick exactly on the lane ceiling. That matters because the
+ * mobile `max` is data-driven: a storm pushes it to 30 m/s, and a ladder step of
+ * 20 would then label 20 and leave the ceiling — the number the reader wants
+ * most — unlabelled.
+ */
+export function windTicksFor(max: number, lanePx: number): number[] {
+  const maxTicks = Math.max(2, Math.floor(lanePx / WIND_TICK_MIN_GAP));
+  let step = max; // no round subdivision fits: label the ceiling alone
+  for (let k = maxTicks; k >= 2; k--) {
+    if (isRoundStep(max / k)) {
+      step = max / k;
+      break;
+    }
+  }
+  const count = Math.round(max / step);
+  return Array.from({ length: count }, (_, i) => (i + 1) * step);
+}
+
+/** Tick text — the units live here so both platforms label scales identically */
+export function formatTempTick(v: number): string {
+  return `${v}°`;
+}
+export function formatWindTick(v: number): string {
+  return `${v}`;
+}
+export function formatPrecipTick(mm: number): string {
+  return `${mm}`;
+}
+
 /** Nice gridline values (integer °C steps) covering the temperature range */
 export function temperatureTicks(temps: number[]): number[] {
   if (!temps.length) return [0, 2, 4, 6, 8];
@@ -229,6 +303,91 @@ export function meteogramWidth(
   return layout.padL + hours * layout.colW + layout.padR;
 }
 
+/**
+ * The resolved y-scales of one meteogram. Built once per render and handed to
+ * the plot AND both axis strips, which is what guarantees a tick label sits on
+ * its gridline: they are the same closure, not two copies of the same formula.
+ */
+interface MeteogramScales {
+  tempTicks: number[];
+  windTicks: number[];
+  ty: (v: number) => number;
+  wy: (v: number) => number;
+  ph: (mm: number) => number;
+}
+
+function meteogramScales(
+  points: HourPoint[],
+  L: MeteogramLayout,
+): MeteogramScales {
+  const temps = points
+    .map((p) => p.tempC)
+    .filter((v): v is number => v !== null);
+  const tempTicks = temperatureTicks(temps);
+  const [lo, hi] = [tempTicks[0], tempTicks[tempTicks.length - 1]];
+  const wMax = windMax(points);
+  return {
+    tempTicks,
+    windTicks: windTicksFor(wMax, L.windSpan),
+    ty: (v) => L.tempTop + ((hi - v) / (hi - lo)) * (L.tempBottom - L.tempTop),
+    wy: (v) => L.windBase - (Math.min(v, wMax) / wMax) * L.windSpan,
+    ph: (mm) => Math.min(L.precipCap, mm * L.precipPerMm),
+  };
+}
+
+/** Lane dividers, repeated into the axis strips so the lanes read continuously */
+function dividerLines(L: MeteogramLayout, width: number): string {
+  return L.dividers
+    .map(
+      (y) =>
+        `<line x1="0" x2="${width}" y1="${y}" y2="${y}" stroke="#EAEEF1" stroke-width="1.5"/>`,
+    )
+    .join("");
+}
+
+/**
+ * Pinned LEFT axis strip: temperature (°C) over wind (m/s), right-anchored so
+ * the numbers hug the plot edge. Mounted outside the scroller by the caller.
+ */
+function buildAxisStrip(L: MeteogramLayout, s: MeteogramScales): string {
+  const ax = L.axisW - L.axisInset;
+  const parts: string[] = [dividerLines(L, L.axisW)];
+  for (const v of s.tempTicks) {
+    parts.push(
+      text(ax, s.ty(v) + TICK_LABEL_DY, formatTempTick(v), TICK_COLOR, L.axisFont, 700, "end"),
+    );
+  }
+  for (const v of s.windTicks) {
+    parts.push(
+      text(ax, s.wy(v) + TICK_LABEL_DY, formatWindTick(v), TICK_COLOR, L.axisFont, 700, "end"),
+    );
+  }
+  return `<svg class="mg-axis" width="${L.axisW}" height="${L.height}" viewBox="0 0 ${L.axisW} ${L.height}" style="display:block;flex:none" aria-hidden="true">${parts.join("")}</svg>`;
+}
+
+/**
+ * Pinned RIGHT axis strip: precipitation (mm), in the precip blue. Precip shares
+ * the temperature baseline, so its ticks cannot live in the left gutter without
+ * colliding with the temp labels — same reasoning (and same side) as the desktop
+ * chart's right-hand scale.
+ */
+function buildRightAxisStrip(L: MeteogramLayout, s: MeteogramScales): string {
+  const parts: string[] = [dividerLines(L, L.rightAxisW)];
+  for (const mm of PRECIP_TICKS) {
+    parts.push(
+      text(
+        L.axisInset,
+        L.precipBase - s.ph(mm) + TICK_LABEL_DY,
+        formatPrecipTick(mm),
+        PRECIP_TICK_COLOR,
+        L.axisFont,
+        700,
+      ),
+    );
+  }
+  return `<svg class="mg-axis-right" width="${L.rightAxisW}" height="${L.height}" viewBox="0 0 ${L.rightAxisW} ${L.height}" style="display:block;flex:none" aria-hidden="true">${parts.join("")}</svg>`;
+}
+
 /** Everything needed to position the scrubber after the SVG is in the DOM */
 export interface MeteogramGeometry {
   width: number;
@@ -245,46 +404,40 @@ export function buildMeteogram(
   t: Labels,
   scrubIdx: number,
   layout: MeteogramLayout = LAYOUT_FULL,
-): { svg: string; geo: MeteogramGeometry } {
+): {
+  svg: string;
+  axisSvg: string;
+  rightAxisSvg: string;
+  geo: MeteogramGeometry;
+} {
   const L = layout;
   const n = points.length;
   const width = meteogramWidth(n, L);
   const cx = (i: number): number => L.padL + i * L.colW + L.colW / 2;
   const hasGust = hasGustSeries(points);
 
-  const temps = points
-    .map((p) => p.tempC)
-    .filter((v): v is number => v !== null);
-  const ticks = temperatureTicks(temps);
-  const [lo, hi] = [ticks[0], ticks[ticks.length - 1]];
-  const ty = (v: number): number =>
-    L.tempTop + ((hi - v) / (hi - lo)) * (L.tempBottom - L.tempTop);
-
-  const ph = (mm: number): number => Math.min(L.precipCap, mm * L.precipPerMm);
-  const wMax = windMax(points);
-  const wy = (v: number): number =>
-    L.windBase - (Math.min(v, wMax) / wMax) * L.windSpan;
+  const s = meteogramScales(points, L);
+  const { ty, wy, ph } = s;
 
   const parts: string[] = [];
 
-  // Gridlines + left axis labels: temperature ticks, precip at 1/2 mm, wind
-  for (const v of ticks) {
+  // Gridlines only — the tick LABELS live in the pinned axis strips, driven by
+  // these same scale closures. Lines span the full plot from x=0: there is no
+  // left gutter to skip any more.
+  for (const v of s.tempTicks) {
     parts.push(
-      `<line x1="${L.gridX1}" x2="${width}" y1="${ty(v)}" y2="${ty(v)}" stroke="#EEF1F4" stroke-width="1"/>`,
-      text(L.axisX, ty(v) + 3.5, `${v}°`, "#94A2AC", L.axisFont, 700),
+      `<line x1="0" x2="${width}" y1="${ty(v)}" y2="${ty(v)}" stroke="#EEF1F4" stroke-width="1"/>`,
     );
   }
-  for (const mm of [1, 2]) {
+  for (const mm of PRECIP_TICKS) {
     const y = L.precipBase - ph(mm);
     parts.push(
-      `<line x1="${L.gridX1}" x2="${width}" y1="${y}" y2="${y}" stroke="#EEF1F4" stroke-width="1"/>`,
-      text(L.axisX, y + 3.5, `${mm}`, "#94A2AC", L.axisFont, 700),
+      `<line x1="0" x2="${width}" y1="${y}" y2="${y}" stroke="#EEF1F4" stroke-width="1"/>`,
     );
   }
-  for (const v of [wMax / 2, wMax]) {
+  for (const v of s.windTicks) {
     parts.push(
-      `<line x1="${L.gridX1}" x2="${width}" y1="${wy(v)}" y2="${wy(v)}" stroke="#EEF1F4" stroke-width="1"/>`,
-      text(L.axisX, wy(v) + 3.5, `${v}`, "#94A2AC", L.axisFont, 700),
+      `<line x1="0" x2="${width}" y1="${wy(v)}" y2="${wy(v)}" stroke="#EEF1F4" stroke-width="1"/>`,
     );
   }
 
@@ -355,12 +508,9 @@ export function buildMeteogram(
     }
   }
 
-  // Lane dividers
-  for (const y of L.dividers) {
-    parts.push(
-      `<line x1="0" x2="${width}" y1="${y}" y2="${y}" stroke="#EAEEF1" stroke-width="1.5"/>`,
-    );
-  }
+  // Lane dividers — same helper as the axis strips, so the three SVGs cannot
+  // end up with dividers at different weights or colours.
+  parts.push(dividerLines(L, width));
 
   // Vindur lane: gust line first (dashed), wind line on top. The gust line is
   // omitted entirely when the dataset has no gust series (task A2).
@@ -428,7 +578,7 @@ export function buildMeteogram(
     `<rect class="scrub-hit" x="0" y="${L.hitY}" width="${width}" height="${L.hitH}" fill="transparent" style="touch-action:none;cursor:ew-resize"/>`,
   );
 
-  const svg = `<svg width="${width}" height="${L.height}" viewBox="0 0 ${width} ${L.height}" style="display:block" role="img">${parts.join("")}</svg>`;
+  const svg = `<svg class="mg-plot" width="${width}" height="${L.height}" viewBox="0 0 ${width} ${L.height}" style="display:block" role="img">${parts.join("")}</svg>`;
 
   const geo: MeteogramGeometry = {
     width,
@@ -439,5 +589,10 @@ export function buildMeteogram(
     indexAt: (localX) =>
       Math.max(0, Math.min(n - 1, Math.round((localX - L.padL - L.colW / 2) / L.colW))),
   };
-  return { svg, geo };
+  return {
+    svg,
+    axisSvg: buildAxisStrip(L, s),
+    rightAxisSvg: buildRightAxisStrip(L, s),
+    geo,
+  };
 }

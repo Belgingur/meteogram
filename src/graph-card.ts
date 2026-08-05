@@ -100,7 +100,7 @@ export function renderGraphCard(
   opts: { bare?: boolean; compact?: boolean } = {},
 ): void {
   let idx = Math.max(0, Math.min(points.length - 1, initialIdx));
-  const { svg, geo } = buildMeteogram(
+  const { svg, axisSvg, rightAxisSvg, geo } = buildMeteogram(
     points,
     t,
     idx,
@@ -154,9 +154,13 @@ export function renderGraphCard(
         </div>
         <span class="ro-icon"></span>
       </div>
-      <div class="scroll">
-        ${laneChips}
-        ${svg}
+      <div class="mg-chart">
+        ${axisSvg}
+        <div class="scroll">
+          ${laneChips}
+          ${svg}
+        </div>
+        ${rightAxisSvg}
       </div>
       <div class="legend">
         <span><span class="swatch-temp"></span>${esc(t.legTemp)}</span>
@@ -167,7 +171,9 @@ export function renderGraphCard(
       </div>
     </div>`;
 
-  const svgEl = host.querySelector("svg")!;
+  // Must target the plot explicitly: the pinned axis strips are SVGs too, and a
+  // bare "svg" selector would match the left strip and break the scrub math.
+  const svgEl = host.querySelector<SVGSVGElement>(".mg-plot")!;
   const q = <T extends Element>(sel: string): T => host.querySelector(sel) as T;
 
   const update = (): void => {
