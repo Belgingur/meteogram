@@ -64,10 +64,29 @@ input:focus-visible,
 .title { font-size: 15px; font-weight: 900; color: var(--ink); }
 .hint { font-size: 11px; font-weight: 700; color: var(--haze-2); }
 
+/* Chart row: pinned left axis · scrolling plot · pinned right axis. Only the
+   middle column scrolls, so both value scales stay put at every scroll offset
+   (same structure as the desktop .yr-chart). */
+.mg-chart {
+  display: flex;
+  align-items: flex-start;
+}
+/* Reserved columns, never squeezed by the plot. Inert on purpose: a press or
+   hover that lands on a tick label must fall through to the card, not read as a
+   scrub or block the sheet drag. */
+.mg-axis,
+.mg-axis-right {
+  flex: none;
+  pointer-events: none;
+}
 .scroll {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-x: contain;
+  /* min-width:0 lets the plot column actually shrink inside the flex row
+     instead of forcing .mg-chart wider than the card at 320px. */
+  flex: 1;
+  min-width: 0;
 }
 /* Labels must never steal pointer events from the scrub strip */
 .scroll svg text { pointer-events: none; }
@@ -105,11 +124,11 @@ input:focus-visible,
 .ro-icon { flex: none; display: flex; }
 
 /* Pinned lane chips: zero-height sticky wrappers before the SVG keep lane
-   identity visible while scrolling. left: 38px is deliberate — it clears
-   the left-axis value column; don't reduce it. */
+   identity visible while scrolling. The left axis is now a reserved column
+   outside this scroller, so the chips no longer need to clear a gutter. */
 .lane-chip-wrap {
   position: sticky;
-  left: 38px;
+  left: 4px;
   width: max-content;
   height: 0;
   z-index: 2;

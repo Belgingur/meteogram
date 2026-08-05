@@ -16,7 +16,13 @@ import type { HourPoint } from "./types";
  * Shared by the graph-only widget, the full landing mode and the sheet.
  */
 
-/** Wind direction arrow, rotated to where the wind blows toward (dir + 180°) */
+/**
+ * Wind direction arrow, pointing to where the wind blows toward (the
+ * meteorological convention: `dirDeg` is the direction the wind comes *from*).
+ * The glyph is drawn tip-down, i.e. already pointing south = "away from north",
+ * so a wind from 0° needs no rotation at all — rotating by `dir + 180°` (as this
+ * did) flipped every arrow back to point at where the wind came from.
+ */
 export function arrowSvg(
   dirDeg: number | null,
   size: number,
@@ -24,7 +30,7 @@ export function arrowSvg(
 ): string {
   if (dirDeg === null) return "";
   return (
-    `<svg width="${size}" height="${size}" viewBox="0 0 20 20" style="flex:none;transform:rotate(${(dirDeg + 180) % 360}deg)">` +
+    `<svg width="${size}" height="${size}" viewBox="0 0 20 20" style="flex:none;transform:rotate(${((dirDeg % 360) + 360) % 360}deg)">` +
     `<g stroke="${color}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none">` +
     `<line x1="10" y1="3.5" x2="10" y2="15"/><path d="M5.5 11 L10 16 L14.5 11"/></g></svg>`
   );
@@ -94,7 +100,7 @@ export function renderGraphCard(
   opts: { bare?: boolean; compact?: boolean } = {},
 ): void {
   let idx = Math.max(0, Math.min(points.length - 1, initialIdx));
-  const { svg, geo } = buildMeteogram(
+  const { svg, axisSvg, rightAxisSvg, geo } = buildMeteogram(
     points,
     t,
     idx,
@@ -148,9 +154,13 @@ export function renderGraphCard(
         </div>
         <span class="ro-icon"></span>
       </div>
-      <div class="scroll">
-        ${laneChips}
-        ${svg}
+      <div class="mg-chart">
+        ${axisSvg}
+        <div class="scroll">
+          ${laneChips}
+          ${svg}
+        </div>
+        ${rightAxisSvg}
       </div>
       <div class="legend">
         <span><span class="swatch-temp"></span>${esc(t.legTemp)}</span>
@@ -161,7 +171,9 @@ export function renderGraphCard(
       </div>
     </div>`;
 
-  const svgEl = host.querySelector("svg")!;
+  // Must target the plot explicitly: the pinned axis strips are SVGs too, and a
+  // bare "svg" selector would match the left strip and break the scrub math.
+  const svgEl = host.querySelector<SVGSVGElement>(".mg-plot")!;
   const q = <T extends Element>(sel: string): T => host.querySelector(sel) as T;
 
   const update = (): void => {

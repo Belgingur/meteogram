@@ -1323,8 +1323,10 @@ class BelMeteogramSheet extends HTMLElement {
     let dy = 0;
     let dragging = false;
     sheet.addEventListener("pointerdown", (e) => {
-      // only drag from the top chrome so the chart can still scroll
-      if ((e.target as HTMLElement).closest(".scroll")) return;
+      // Only drag from the top chrome so the chart can still scroll. Guard the
+      // whole chart row, not just the scroller: the pinned axis strips are
+      // siblings of `.scroll`, and a press on one must not dismiss the sheet.
+      if ((e.target as HTMLElement).closest(".mg-chart")) return;
       dragging = true;
       startY = e.clientY;
       sheet.setPointerCapture(e.pointerId);
