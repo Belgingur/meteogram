@@ -1063,6 +1063,15 @@ input:focus-visible,
   font-size: 14px;
   font-variant-numeric: tabular-nums;
 }
+/* The hour containing "now", in both the mobile card (.hrow) and the desktop
+   panel table (.hrow-p). Today's rows start at the forecast's analysis hour
+   rather than midnight, so the current hour is never a fixed row — this is the
+   anchor that makes its position legible instead of something to hunt for. */
+.hrow-now {
+  background: var(--aurora-haze);
+  box-shadow: inset 2px 0 0 var(--aurora);
+}
+.hrow-now .h-time { color: var(--aurora); font-weight: 900; }
 .hrow-head {
   border-top: none;
   padding: 4px 0 8px;

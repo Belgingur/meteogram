@@ -27,13 +27,45 @@ const daySpecs: DaySpec[] = [
   { max: 13, min: 8, rain: null, wind: 5, dir: 250, cloud: 0.45 },
 ];
 
+/**
+ * Hours of already-elapsed forecast the fixture opens with, standing in for a
+ * real model analysis time: a run is always some hours old by the time a browser
+ * loads it, so `time[0]` is the past, not "now".
+ *
+ * This matters beyond realism. While the sample's first point WAS the current
+ * hour, every "does it open at the current hour?" bug was invisible locally —
+ * index 0, "now" and the plot's left edge all coincided, so a renderer that
+ * simply never scrolled looked correct. Keep this non-zero.
+ */
+const SAMPLE_ANALYSIS_AGE_H = 3;
+
 export function sampleHourPoints(hours: number): HourPoint[] {
   const start = new Date();
-  start.setMinutes(0, 0, 0);
+  // Truncate in UTC, not local time: real forecast steps land on whole UTC
+  // hours, and everything downstream reads these points with getUTC* accessors.
+  // Truncating locally would put every sample point at :30 for a contributor in
+  // a half-hour-offset zone (IST, NPT, ACST) — same code, different data.
+  start.setUTCMinutes(0, 0, 0);
+  start.setTime(start.getTime() - SAMPLE_ANALYSIS_AGE_H * 3_600_000);
+  const day0 = Date.UTC(
+    start.getUTCFullYear(),
+    start.getUTCMonth(),
+    start.getUTCDate(),
+  );
   const points: HourPoint[] = [];
   for (let i = 0; i < hours; i++) {
-    const spec = daySpecs[Math.floor(i / 24) % daySpecs.length];
-    const h = i % 24;
+    const utcMs = start.getTime() + i * 3_600_000;
+    const at = new Date(utcMs);
+    // Key the diurnal shape and the day spec off each point's real clock
+    // hour/date rather than off `i`. Now that the series no longer begins at the
+    // top of a synthetic day, `i % 24` would slide the warm afternoon and the
+    // bright-night daylight window away from the hour labels the chart draws.
+    const h = at.getUTCHours();
+    const dayIdx = Math.round(
+      (Date.UTC(at.getUTCFullYear(), at.getUTCMonth(), at.getUTCDate()) - day0) /
+        86_400_000,
+    );
+    const spec = daySpecs[dayIdx % daySpecs.length];
     const temp = Math.round(
       spec.min + (spec.max - spec.min) * (0.5 - 0.5 * Math.cos(((h - 4) / 24) * 2 * Math.PI)),
     );
@@ -48,7 +80,6 @@ export function sampleHourPoints(hours: number): HourPoint[] {
     }
     const wind = Math.max(1, spec.wind + Math.round(1.5 * Math.sin(((h - 15) / 24) * 2 * Math.PI)));
     const daylight = h >= 4 && h <= 23 ? 1 : 0; // Icelandic summer nights are bright
-    const utcMs = start.getTime() + i * 3_600_000;
     points.push({
       local: new Date(utcMs),
       utcMs,
