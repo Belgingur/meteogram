@@ -239,6 +239,11 @@ export class BelMeteogram extends HTMLElement {
   /** The exact series the mounted chart was drawn from, so that anything acting
    *  on a column index (the ←/→ keys) addresses the columns actually on screen */
   private renderedGraphPoints: HourPoint[] = [];
+  /** The cursor column that series was drawn with. Not the same as `scrubIdx`:
+   *  a cursor restored from `scrubUtcMs` is on screen while `scrubIdx` is still
+   *  -1 ("the user has not scrubbed"), and the keys must start from what is
+   *  drawn rather than from the sentinel's fallback. */
+  private renderedScrubIdx = 0;
   private onKeyDown = (e: KeyboardEvent): void => {
     if (!this.isFull || !this.usesPanel) return;
     if (e.key === "Escape" && this.isExpanded()) {
@@ -253,7 +258,8 @@ export class BelMeteogram extends HTMLElement {
     // and then this index would address a different hour than the one on screen.
     const gp = this.renderedGraphPoints;
     if (!gp.length) return;
-    let idx = this.scrubIdx >= 0 ? this.scrubIdx : 0;
+    // Start from the cursor on screen, which after a restore is NOT column 0.
+    let idx = this.scrubIdx >= 0 ? this.scrubIdx : this.renderedScrubIdx;
     if (e.key === "ArrowLeft") {
       e.preventDefault();
       idx = Math.max(0, idx - 1);
@@ -952,10 +958,14 @@ export class BelMeteogram extends HTMLElement {
       // from graph mode's only because the window does.
       const carried =
         this.scrubIdx >= 0 ? this.scrubIdx : this.restoreScrubIndex(gp);
-      const initial = carried >= 0 ? carried : 0;
+      const initial = Math.max(
+        0,
+        Math.min(gp.length - 1, carried >= 0 ? carried : 0),
+      );
+      this.renderedScrubIdx = initial;
       if (wide) {
         const { setScrubIdx } = renderMapPanelGraph(host, gp, {
-          scrubIdx: Math.max(0, Math.min(gp.length - 1, initial)),
+          scrubIdx: initial,
           nowIdx: 0,
           anaIdx: this.analysisIndex(gp),
           onScrub: (i) => {
@@ -990,6 +1000,7 @@ export class BelMeteogram extends HTMLElement {
       }
     } else {
       this.renderedGraphPoints = [];
+      this.renderedScrubIdx = 0;
       this.graphScrubSetter = null;
     }
   }
