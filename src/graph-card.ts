@@ -64,6 +64,13 @@ export function timestepHours(points: HourPoint[]): number {
   return Math.max(1, Math.round((points[1].utcMs - points[0].utcMs) / 3_600_000));
 }
 
+/**
+ * How much already-elapsed forecast the card opens with, in columns, when it
+ * anchors the cursor. Enough to show that the past is there (and that it can be
+ * scrolled back to); little enough that the visible width is forecast.
+ */
+const CURSOR_LEAD_COLUMNS = 1.5;
+
 /** Index of the hour closest to "now"; 0 when the series is in the future */
 export function nowIndex(points: HourPoint[]): number {
   const now = Date.now();
@@ -77,6 +84,40 @@ export function nowIndex(points: HourPoint[]): number {
     }
   }
   return best;
+}
+
+/**
+ * Column of `points` standing for the instant `utcMs`, or -1 for "no such hour
+ * here". This is the safe way to carry a scrub across anything that rebuilds the
+ * series — a reload, a model switch, a new location, another view with its own
+ * window — since a column index only means something next to the window it was
+ * measured in.
+ *
+ * It declines in two cases. If that timestep has already finished, the hour is
+ * history and restoring it would reopen the widget in the past. If the closest
+ * column is more than half a step away, the instant is not really in this series
+ * (a shorter forecast, a coarser model, a later day) and snapping to the nearest
+ * edge would quietly show an unrelated hour.
+ */
+export function indexAtInstant(
+  points: HourPoint[],
+  utcMs: number,
+  nowMs: number = Date.now(),
+): number {
+  if (!points.length) return -1;
+  const stepMs = timestepHours(points) * 3_600_000;
+  if (utcMs + stepMs <= nowMs) return -1;
+
+  let best = -1;
+  let bd = Infinity;
+  for (let i = 0; i < points.length; i++) {
+    const d = Math.abs(points[i].utcMs - utcMs);
+    if (d < bd) {
+      bd = d;
+      best = i;
+    }
+  }
+  return bd <= stepMs / 2 ? best : -1;
 }
 
 function laneChip(translateY: number, swatch: string, label: string): string {
@@ -100,12 +141,8 @@ export function renderGraphCard(
   opts: { bare?: boolean; compact?: boolean } = {},
 ): void {
   let idx = Math.max(0, Math.min(points.length - 1, initialIdx));
-  const { svg, axisSvg, rightAxisSvg, geo } = buildMeteogram(
-    points,
-    t,
-    idx,
-    opts.compact ? LAYOUT_COMPACT : LAYOUT_FULL,
-  );
+  const layout = opts.compact ? LAYOUT_COMPACT : LAYOUT_FULL;
+  const { svg, axisSvg, rightAxisSvg, geo } = buildMeteogram(points, t, idx, layout);
   const roIcon = opts.compact ? 34 : 38;
 
   // In `bare` mode (the desktop detail panel) the enclosing panel supplies the
@@ -209,6 +246,45 @@ export function renderGraphCard(
       : "";
   };
   update();
+
+  // Bring the cursor's hour into view. `points` can start at the forecast's
+  // ANALYSIS time, which is already hours old when a browser loads it, so the
+  // plot's left edge is the past and the cursor (placed at "now" by the caller)
+  // sits off to the right: without this the card opens on stale hours while the
+  // readout describes a column nobody can see.
+  //
+  // Deliberately NOT the desktop panel's centring (scrollToScrub in
+  // map-panel-graph.ts): that view is wide enough to spare half of itself for the
+  // past, this one is not. A 360px phone gives the scroller ~9 columns, so
+  // centring would open on ~4h of history against ~4h of forecast. Anchoring the
+  // cursor a lead-in from the left keeps the past reachable by scrolling back
+  // while spending the card on what the card is for.
+  const scroller = host.querySelector<HTMLElement>(".scroll")!;
+  let anchored = false;
+  const anchorCursor = (): void => {
+    if (anchored) return;
+    // Needs measured layout. clientWidth is 0 until the card has a laid-out box
+    // (webfont still loading, a display:none parent, a sheet mid-animation), and
+    // measuring 0 would latch a meaningless offset.
+    const view = scroller.clientWidth;
+    if (!view) return;
+    scroller.scrollLeft = Math.max(0, geo.cx(idx) - CURSOR_LEAD_COLUMNS * layout.colW);
+    anchored = true;
+  };
+  anchorCursor();
+  if (!anchored && typeof requestAnimationFrame === "function") {
+    requestAnimationFrame(anchorCursor);
+    // Still nothing to measure next frame: position once the box first gets a
+    // width, then stop watching. Deliberately one-shot — a later resize must not
+    // yank the view back to "now" from wherever the user has scrolled to.
+    if (typeof ResizeObserver !== "undefined") {
+      const ro = new ResizeObserver(() => {
+        anchorCursor();
+        if (anchored) ro.disconnect();
+      });
+      ro.observe(scroller);
+    }
+  }
 
   const scrubFrom = (e: PointerEvent): void => {
     const rect = svgEl.getBoundingClientRect();

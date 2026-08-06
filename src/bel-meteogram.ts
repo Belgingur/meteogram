@@ -7,7 +7,12 @@ import {
   stationDataUrl,
   type ApiOptions,
 } from "./api";
-import { nowIndex, renderGraphCard, timestepHours } from "./graph-card";
+import {
+  indexAtInstant,
+  nowIndex,
+  renderGraphCard,
+  timestepHours,
+} from "./graph-card";
 import { labels, type Labels } from "./i18n";
 import {
   coordLabel,
@@ -50,7 +55,20 @@ const MIN_PANEL_H_WIDE = 360;
 
 interface MapPanelPersisted {
   selectedDay?: number;
-  scrubIdx?: number;
+  /**
+   * The scrubbed hour as an ABSOLUTE instant (epoch ms), never as a column
+   * index. An index only means something next to the window it was measured in,
+   * and this widget builds three different ones — the graph card counts from the
+   * forecast's analysis time, `graphPoints()` counts from now, the table groups
+   * by day — so a stored index silently became a different hour depending on
+   * which view read it back, and a different hour again tomorrow. A timestamp
+   * means the same thing everywhere, and can be checked for having passed.
+   *
+   * The old `scrubIdx` key is deliberately not read: any value still in
+   * localStorage from a previous build is exactly the ambiguous number this
+   * replaces, so it is left to rot rather than migrated.
+   */
+  scrubUtcMs?: number;
   view?: "table" | "graph";
   panelPos?: { x: number; y: number };
   /** User-set panel size (map-panel 2a resize grip). 0/absent → defaults. */
@@ -201,6 +219,13 @@ export class BelMeteogram extends HTMLElement {
   private settingsOpen = false;
   private query = "";
   private scrubIdx = -1; // -1 → default to the "now" hour
+  /**
+   * A scrubbed hour carried across page loads, as an instant. Kept separately
+   * from `scrubIdx` (which stays an index, because that is what the renderers
+   * speak) and resolved against whichever series is about to be drawn — see
+   * restoreScrubIndex.
+   */
+  private scrubUtcMs: number | null = null;
   /** Desktop (two-column) layout when the viewport is ≥ 900px */
   private isWide = false;
   /** Map-panel 2a: draggable position within the host */
@@ -211,6 +236,9 @@ export class BelMeteogram extends HTMLElement {
   private analysisTime: Date | null = null;
   private lastModified: Date | null = null;
   private graphScrubSetter: ((i: number) => void) | null = null;
+  /** The exact series the mounted chart was drawn from, so that anything acting
+   *  on a column index (the ←/→ keys) addresses the columns actually on screen */
+  private renderedGraphPoints: HourPoint[] = [];
   private onKeyDown = (e: KeyboardEvent): void => {
     if (!this.isFull || !this.usesPanel) return;
     if (e.key === "Escape" && this.isExpanded()) {
@@ -219,7 +247,12 @@ export class BelMeteogram extends HTMLElement {
       return;
     }
     if (this.view !== "graph" || !this.points.length) return;
-    const gp = this.graphPoints();
+    // The window the CHART was built from, not a freshly computed one:
+    // graphPoints() slices from "now", so recomputing it here would shift every
+    // column by one the moment the hour rolls over while the panel is open —
+    // and then this index would address a different hour than the one on screen.
+    const gp = this.renderedGraphPoints;
+    if (!gp.length) return;
     let idx = this.scrubIdx >= 0 ? this.scrubIdx : 0;
     if (e.key === "ArrowLeft") {
       e.preventDefault();
@@ -230,7 +263,7 @@ export class BelMeteogram extends HTMLElement {
     } else {
       return;
     }
-    this.scrubIdx = idx;
+    this.noteScrub(gp, idx);
     this.graphScrubSetter?.(idx);
     this.persistMapPanel();
   };
@@ -293,12 +326,18 @@ export class BelMeteogram extends HTMLElement {
     this.started = true;
     this.isWide = this.mql.matches;
     this.isLandscape = this.mqlLandscape.matches;
-    const persisted = readMapPanelState();
+    // Only full mode reads this state, because only full mode writes it (see
+    // persistMapPanel). The store is per-origin, so without the guard a plain
+    // mode="graph" card embedded next to a Mímir panel would silently adopt that
+    // panel's day, view and scrubbed hour — state belonging to a UI it doesn't
+    // have. Read once, here: a host that flips `mode` on an already-connected
+    // element keeps the defaults rather than picking stored state up late.
+    const persisted: MapPanelPersisted = this.isFull ? readMapPanelState() : {};
     if (typeof persisted.selectedDay === "number") {
       this.selectedDay = persisted.selectedDay;
     }
-    if (typeof persisted.scrubIdx === "number") {
-      this.scrubIdx = persisted.scrubIdx;
+    if (typeof persisted.scrubUtcMs === "number") {
+      this.scrubUtcMs = persisted.scrubUtcMs;
     }
     if (persisted.view === "table" || persisted.view === "graph") {
       this.view = persisted.view;
@@ -405,7 +444,7 @@ export class BelMeteogram extends HTMLElement {
     if (!this.isFull || !this.usesPanel) return;
     writeMapPanelState({
       selectedDay: this.selectedDay,
-      scrubIdx: this.scrubIdx >= 0 ? this.scrubIdx : undefined,
+      scrubUtcMs: this.scrubUtcMs ?? undefined,
       view: this.view,
       panelPos:
         this.panelPos.x >= 0
@@ -552,7 +591,12 @@ export class BelMeteogram extends HTMLElement {
 
   private async load(): Promise<void> {
     const token = ++this.loadToken;
-    const savedScrub = this.scrubIdx;
+    // Drop the scrubbed COLUMN but keep the instant it stood for (scrubUtcMs).
+    // A load can hand us a different series — another model, a coarser timestep,
+    // a shorter window — where the same column number is a different hour. Let
+    // paint() resolve the instant against whatever actually arrives; if it no
+    // longer fits, restoreScrubIndex declines and we open at now.
+    this.scrubIdx = -1;
 
     if (this.hasAttribute("sample")) {
       this.points = sampleHourPoints(this.isFull ? FULL_MODE_HOURS : this.hours);
@@ -572,7 +616,6 @@ export class BelMeteogram extends HTMLElement {
         Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
       );
       this.status = "ready";
-      this.scrubIdx = savedScrub;
       this.paint();
       this.emitStatus();
       this.emitLocation();
@@ -641,7 +684,6 @@ export class BelMeteogram extends HTMLElement {
         : this.points.length > 0
           ? new Date(this.points[0].utcMs)
           : this.lastModified;
-      this.scrubIdx = savedScrub;
       this.status = this.points.length ? "ready" : "error";
       this.paint();
       this.emitStatus(this.points.length ? undefined : "empty forecast");
@@ -706,10 +748,14 @@ export class BelMeteogram extends HTMLElement {
       return;
     }
 
-    const initial =
-      this.scrubIdx >= 0 ? this.scrubIdx : nowIndex(this.points);
+    // This series starts at the analysis time, so "now" is a column in, not
+    // column 0 — and a restored scrub resolves against THIS window rather than
+    // whichever one wrote it.
+    const carried =
+      this.scrubIdx >= 0 ? this.scrubIdx : this.restoreScrubIndex(this.points);
+    const initial = carried >= 0 ? carried : nowIndex(this.points);
     renderGraphCard(this.body, this.points, t, initial, (i) => {
-      this.scrubIdx = i;
+      this.noteScrub(this.points, i);
     });
   }
 
@@ -767,6 +813,29 @@ export class BelMeteogram extends HTMLElement {
       }
     }
     return best?.name ?? coordLabel(lat, lon, t);
+  }
+
+  /**
+   * Resolve the carried-over scrub instant to a column of `points`, or -1 for
+   * "no opinion — open at now". The rules live in indexAtInstant; declining is
+   * the common case and it is the right one, since the alternative is reopening
+   * the widget on an hour that has already happened.
+   */
+  private restoreScrubIndex(points: HourPoint[]): number {
+    return this.scrubUtcMs === null
+      ? -1
+      : indexAtInstant(points, this.scrubUtcMs);
+  }
+
+  /** Remember a scrubbed column as the instant it stands for (see scrubUtcMs).
+   *  A column with no point behind it is not recorded at all: keeping the index
+   *  while dropping the instant would leave the two disagreeing, which is the
+   *  state this pairing exists to prevent. */
+  private noteScrub(points: HourPoint[], i: number): void {
+    const p = points[i];
+    if (!p) return;
+    this.scrubIdx = i;
+    this.scrubUtcMs = p.utcMs;
   }
 
   /** The graph window (from "now") shown in the meteogram card / panel */
@@ -878,14 +947,19 @@ export class BelMeteogram extends HTMLElement {
     const host = this.body.querySelector<HTMLElement>(".graph-host");
     if (host && this.status === "ready") {
       const gp = this.graphPoints();
-      const initial = this.scrubIdx >= 0 ? this.scrubIdx : 0;
+      this.renderedGraphPoints = gp;
+      // `gp` starts at now, so 0 IS the current hour here — the fallback differs
+      // from graph mode's only because the window does.
+      const carried =
+        this.scrubIdx >= 0 ? this.scrubIdx : this.restoreScrubIndex(gp);
+      const initial = carried >= 0 ? carried : 0;
       if (wide) {
         const { setScrubIdx } = renderMapPanelGraph(host, gp, {
           scrubIdx: Math.max(0, Math.min(gp.length - 1, initial)),
           nowIdx: 0,
           anaIdx: this.analysisIndex(gp),
           onScrub: (i) => {
-            this.scrubIdx = i;
+            this.noteScrub(gp, i);
             this.persistMapPanel();
           },
           onFullscreen: () => {
@@ -910,11 +984,12 @@ export class BelMeteogram extends HTMLElement {
         this.graphScrubSetter = setScrubIdx;
       } else {
         renderGraphCard(host, gp, t, initial, (i) => {
-          this.scrubIdx = i;
+          this.noteScrub(gp, i);
         });
         this.graphScrubSetter = null;
       }
     } else {
+      this.renderedGraphPoints = [];
       this.graphScrubSetter = null;
     }
   }
