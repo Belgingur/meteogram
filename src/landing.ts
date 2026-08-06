@@ -196,23 +196,24 @@ function hourCells(p: HourPoint, iconSize: number): string {
 }
 
 /**
- * Extra row class for the hour that contains "now" — the table's visual anchor.
+ * Row-class marker for the hour that contains "now" — the table's visual anchor.
  *
  * Matched on absolute time, never on position: today's group starts at whichever
  * hour the forecast run begins with (an analysis a few hours back, not
  * midnight), so the current hour lands on a different row for every run. A row
  * index would be a different clock hour on each load — the same mistake that put
  * "now" in three places with three meanings.
+ *
+ * "Now" is sampled ONCE per table, not once per row: rows tile the timeline
+ * without gaps, so a clock that advanced mid-render could match two adjacent
+ * rows or neither. One snapshot makes "exactly one row" a property of the
+ * function rather than a race it usually wins. The step comes from the data
+ * because some forecasts advance 3 h or 6 h at a time.
  */
-function nowRowClass(p: HourPoint, stepMs: number): string {
+function nowRowMarker(hours: HourPoint[]): (p: HourPoint) => string {
   const now = Date.now();
-  return now >= p.utcMs && now < p.utcMs + stepMs ? " hrow-now" : "";
-}
-
-/** Timestep of a day's rows — some forecasts step 3 h or 6 h, so the "contains
- *  now" window is per-dataset, not always an hour. */
-function stepMsOf(hours: HourPoint[]): number {
-  return hours.length > 1 ? hours[1].utcMs - hours[0].utcMs : 3_600_000;
+  const stepMs = hours.length > 1 ? hours[1].utcMs - hours[0].utcMs : 3_600_000;
+  return (p) => (now >= p.utcMs && now < p.utcMs + stepMs ? " hrow-now" : "");
 }
 
 /** Uppercase header row for an hourly table */
@@ -316,9 +317,9 @@ export function dayChipsHtml(
 
 /** Mobile selected-day card: header + full 24-row hourly table */
 export function selDayCardHtml(d: DayGroup, t: Labels): string {
-  const step = stepMsOf(d.hours);
+  const nowRow = nowRowMarker(d.hours);
   const rows = d.hours
-    .map((p) => `<div class="hrow${nowRowClass(p, step)}">${hourCells(p, 24)}</div>`)
+    .map((p) => `<div class="hrow${nowRow(p)}">${hourCells(p, 24)}</div>`)
     .join("");
   return `
     <div class="sel-card">
@@ -336,9 +337,9 @@ export function selDayCardHtml(d: DayGroup, t: Labels): string {
  * sticky header row (grid 38/28/1fr/0.9fr/1.3fr).
  */
 export function panelTableHtml(d: DayGroup, t: Labels): string {
-  const step = stepMsOf(d.hours);
+  const nowRow = nowRowMarker(d.hours);
   const rows = d.hours
-    .map((p) => `<div class="hrow-p${nowRowClass(p, step)}">${hourCells(p, 22)}</div>`)
+    .map((p) => `<div class="hrow-p${nowRow(p)}">${hourCells(p, 22)}</div>`)
     .join("");
   return `
     <div class="panel-table">

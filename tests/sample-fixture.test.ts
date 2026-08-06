@@ -60,10 +60,14 @@ describe("hourly table marks the hour containing now", () => {
     const points = sampleHourPoints(48);
     const days = groupDays(points, t, nowIndex(points));
     const rows = days[0].hours;
+    // One snapshot of the clock for the whole assertion: sampling it per row and
+    // again for the expectation can straddle an hour boundary and fail on a
+    // correct implementation.
+    const now = Date.now();
     const marked = rows.findIndex(
-      (p) => Date.now() >= p.utcMs && Date.now() < p.utcMs + 3_600_000,
+      (p) => now >= p.utcMs && now < p.utcMs + 3_600_000,
     );
     expect(marked).toBeGreaterThanOrEqual(0);
-    expect(rows[marked].local.getUTCHours()).toBe(new Date().getUTCHours());
+    expect(rows[marked].local.getUTCHours()).toBe(new Date(now).getUTCHours());
   });
 });
