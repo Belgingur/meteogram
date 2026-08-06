@@ -179,8 +179,15 @@ function text(
   size: number,
   weight: number,
   anchor: "start" | "middle" | "end" = "start",
+  /** Draw a white casing behind the glyphs. `paint-order` puts the stroke behind
+   *  the fill, so the letterform stays crisp — it only buys separation where the
+   *  label unavoidably lands on other ink (weather symbols, the scrub cursor). */
+  halo = false,
 ): string {
-  return `<text x="${x}" y="${y}" fill="${fill}" font-size="${size}" font-weight="${weight}" text-anchor="${anchor}" font-family="Nunito, system-ui, sans-serif">${esc(label)}</text>`;
+  const casing = halo
+    ? ` stroke="#ffffff" stroke-width="3" stroke-linejoin="round" paint-order="stroke"`
+    : "";
+  return `<text x="${x}" y="${y}" fill="${fill}" font-size="${size}" font-weight="${weight}" text-anchor="${anchor}" font-family="Nunito, system-ui, sans-serif"${casing}>${esc(label)}</text>`;
 }
 
 /** Polyline through non-null values, breaking the pen across gaps */
@@ -222,6 +229,37 @@ export const PRECIP_TICKS: readonly number[] = [1, 2];
  * its baseline, so half the cap height has to be added back to centre it.
  */
 export const TICK_LABEL_DY = 3.5;
+
+/**
+ * Cap height of Nunito as a fraction of font-size. Digits and the degree sign
+ * both reach cap height and neither has a descender, so for a temperature label
+ * this fraction IS the glyph box: `[baseline - cap, baseline]`.
+ */
+export const TEMP_LABEL_CAP = 0.705;
+
+/**
+ * Baseline y for the temperature value label of a point drawn at `tempY`.
+ *
+ * The label wants to sit above its point, but the band above the temp lane is
+ * chrome — the weather-symbol row and the scrub track/handle live there — and
+ * all of it is painted AFTER the labels, so a label that strays up gets a grey
+ * bar drawn straight through it. On LAYOUT_FULL that made the top 14% of the
+ * lane unsafe, and since the tick range always brackets the data, the day's
+ * maximum lands in the top step of the scale essentially every time.
+ *
+ * So the label box stays below all of it: when placing it above would push the
+ * glyphs past that ceiling, it flips under the point instead, where a peak has
+ * room. One rule covers all three collisions because the symbol row, the track
+ * and the handle all sit above the lane — with one wrinkle: the handle is a
+ * circle centred ON the lane's top edge, so it reaches `handleR` INTO the lane
+ * and the ceiling has to be the lower of the two, not `tempTop` alone.
+ */
+export function tempLabelBaselineY(tempY: number, L: MeteogramLayout): number {
+  const cap = L.tempFont * TEMP_LABEL_CAP;
+  const ceiling = Math.max(L.tempTop, L.scrubTop + L.handleR);
+  const above = tempY + L.tempLabelDy;
+  return above - cap < ceiling ? tempY - L.tempLabelDy + cap : above;
+}
 
 /** Minimum vertical gap between wind tick labels before they read as crowded */
 const WIND_TICK_MIN_GAP = 20;
@@ -523,12 +561,16 @@ export function buildMeteogram(
     `<path d="${linePath(points, (p) => p.windMs, cx, wy)}" fill="none" stroke="#3E8E63" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>`,
   );
 
-  // Temperature value labels every 3 h, above the curve, temp-colored
+  // Temperature value labels every 3 h, temp-colored. Placement (above the
+  // curve, or flipped under it near the top of the lane) is tempLabelBaselineY's
+  // job; the halo keeps them readable on the columns that also carry a weather
+  // symbol — labels land on every third hour, symbols on every second, so every
+  // other label shares its column with one.
   for (let i = 1; i < n; i += 3) {
     const v = points[i].tempC;
     if (v !== null) {
       parts.push(
-        text(cx(i), ty(v) + L.tempLabelDy, `${Math.round(v)}°`, tempColor(Math.round(v)), L.tempFont, 800, "middle"),
+        text(cx(i), tempLabelBaselineY(ty(v), L), `${Math.round(v)}°`, tempColor(Math.round(v)), L.tempFont, 800, "middle", true),
       );
     }
   }
