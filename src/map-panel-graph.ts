@@ -20,6 +20,10 @@ import {
 } from "./render";
 import {
   ARROW_STRIP_MIN,
+  CHART_FIT_SELECTORS,
+  fittedLaneY,
+  fittedWidth,
+  resolveChartFit,
   resolveYrBands,
   YR_SPEC,
   yrHeaderBaselines,
@@ -617,84 +621,52 @@ function scrollToScrub(
   scrollEl.scrollLeft = Math.max(0, x - scrollEl.clientWidth / 2);
 }
 
-/** Scale the fullscreen chart to fill the overlay body (keeps scrub geometry). */
-function fitFullscreenChart(backdrop: HTMLElement): void {
-  const area = backdrop.querySelector<HTMLElement>(".fs-chart-area");
-  const axis = backdrop.querySelector<SVGSVGElement>(".yr-axis");
-  const plot = backdrop.querySelector<SVGSVGElement>(".yr-plot");
-  if (!area || !axis || !plot) return;
-
-  const availH = area.clientHeight;
-  if (availH < 280) return;
-
-  const scale = availH / YR_FULLSCREEN.height;
-  backdrop.dataset.fsScale = String(scale);
-
-  axis.style.height = `${availH}px`;
-  axis.style.width = `${Math.round(YR_FULLSCREEN.axisW * scale)}px`;
-  plot.style.height = `${availH}px`;
-  plot.style.width = `${Math.round(geoWidth(plot) * scale)}px`;
-
-  backdrop.querySelectorAll<HTMLElement>(".yr-lane").forEach((el) => {
-    const match = /translateY\((\d+(?:\.\d+)?)px\)/.exec(el.style.transform);
-    if (match && !el.dataset.laneY) {
-      el.dataset.laneY = match[1];
-    }
-    const base = Number(el.dataset.laneY ?? match?.[1] ?? 0);
-    el.style.transform = `translateY(${Math.round(base * scale)}px)`;
-  });
-}
-
-function geoWidth(plot: SVGSVGElement): number {
-  return parseFloat(plot.getAttribute("width") || "0");
-}
-
-function fsDisplayScale(backdrop: HTMLElement): () => number {
-  return () => {
-    const raw = backdrop.dataset.fsScale;
-    const scale = raw ? parseFloat(raw) : 1;
-    return Number.isFinite(scale) && scale > 0 ? scale : 1;
-  };
-}
-
 /**
- * Scale a rendered yr chart (axis + plot + sticky lane chips) so its `baseHeight`
- * px viewBox fills `availH` px of screen height, keeping the scrub geometry
- * intact — the ratio is recorded in a `fitScale` dataset attr and read back by
- * pointer/scroll math via {@link rootDisplayScale}. Used by the full-screen
- * landscape graph so it fills the viewport without a vertical scrollbar.
+ * Scale a rendered yr chart so its `baseHeight` viewBox fills `availH` px of
+ * screen, keeping the scrub geometry intact: the ratio is recorded on the root
+ * and read back by the pointer/scroll maths via {@link chartDisplayScale}.
+ *
+ * Every surface that fits a chart comes through here — the landscape phone and
+ * the expanded desktop overlay used to have a function each, which is how the
+ * overlay ended up never scaling its right-hand precip axis: that axis kept its
+ * unscaled height while the plot beside it stretched, so the mm ticks pointed
+ * at the wrong gridlines at every height except exactly 560px.
  */
-function scaleChartTo(root: HTMLElement, baseHeight: number, availH: number): void {
-  const axis = root.querySelector<SVGSVGElement>(".yr-axis");
-  const plot = root.querySelector<SVGSVGElement>(".yr-plot");
-  // A phone in landscape gives the chart column only ~120–230px of visible
-  // height; a low floor keeps it filling rather than clipping on short screens.
-  if (!axis || !plot || availH < 60) return;
-  const scale = availH / baseHeight;
-  root.dataset.fitScale = String(scale);
-  const axisW = parseFloat(axis.getAttribute("width") || "0");
-  axis.style.height = `${availH}px`;
-  axis.style.width = `${Math.round(axisW * scale)}px`;
-  plot.style.height = `${availH}px`;
-  plot.style.width = `${Math.round(geoWidth(plot) * scale)}px`;
-  // Keep the right-hand precip axis in lockstep with the scaled chart.
-  const axisR = root.querySelector<SVGSVGElement>(".yr-axis-right");
-  if (axisR) {
-    const rW = parseFloat(axisR.getAttribute("width") || "0");
-    axisR.style.height = `${availH}px`;
-    axisR.style.width = `${Math.round(rW * scale)}px`;
+function fitChart(
+  root: HTMLElement,
+  baseHeight: number,
+  availH: number,
+): number {
+  const fit = resolveChartFit(baseHeight, availH);
+  if (!fit || !root.querySelector(".yr-plot")) {
+    return chartDisplayScale(root)();
   }
+
+  root.dataset.chartScale = String(fit.scale);
+
+  for (const selector of CHART_FIT_SELECTORS) {
+    const svg = root.querySelector<SVGSVGElement>(selector);
+    if (!svg) continue;
+    const baseWidth = parseFloat(svg.getAttribute("width") || "0");
+    svg.style.height = `${fit.heightPx}px`;
+    svg.style.width = `${fittedWidth(baseWidth, fit).toFixed(2)}px`;
+  }
+
+  // Sticky lane chips are HTML, positioned against the plot's y-coordinates.
   root.querySelectorAll<HTMLElement>(".yr-lane").forEach((el) => {
-    const match = /translateY\((\d+(?:\.\d+)?)px\)/.exec(el.style.transform);
+    const match = /translateY\(([\d.]+)px\)/.exec(el.style.transform);
     if (match && !el.dataset.laneY) el.dataset.laneY = match[1];
     const base = Number(el.dataset.laneY ?? match?.[1] ?? 0);
-    el.style.transform = `translateY(${Math.round(base * scale)}px)`;
+    el.style.transform = `translateY(${fittedLaneY(base, fit).toFixed(2)}px)`;
   });
+
+  return fit.scale;
 }
 
-function rootDisplayScale(root: HTMLElement): () => number {
+/** The scale {@link fitChart} last applied to this chart, or 1 if unfitted. */
+function chartDisplayScale(root: HTMLElement): () => number {
   return () => {
-    const raw = root.dataset.fitScale;
+    const raw = root.dataset.chartScale;
     const scale = raw ? parseFloat(raw) : 1;
     return Number.isFinite(scale) && scale > 0 ? scale : 1;
   };
@@ -833,7 +805,7 @@ function wireFullscreenScrub(
     opts.anaIdx,
     L,
   );
-  const scaleFn = fsDisplayScale(root);
+  const scaleFn = chartDisplayScale(root);
   const q = <T extends Element>(sel: string): T => root.querySelector(sel) as T;
   const update = (): void => {
     const p = points[idx];
@@ -863,7 +835,8 @@ function wireFullscreenScrub(
     scaleFn,
   );
   const refit = (): void => {
-    fitFullscreenChart(root);
+    const area = root.querySelector<HTMLElement>(".fs-chart-area");
+    if (area) fitChart(root, L.height, area.clientHeight);
     scrollToScrub(scroll, geo, idx, L.colW, scaleFn);
     update();
   };
@@ -914,7 +887,7 @@ export function renderMapPanelGraph(
   const plot = host.querySelector<SVGSVGElement>(".yr-plot")!;
   const scroll = host.querySelector<HTMLElement>(".yr-scroll")!;
   const fitEl = host.querySelector<HTMLElement>(".yr-chart-fit");
-  const scaleFn = opts.fit ? rootDisplayScale(host) : (): number => 1;
+  const scaleFn = opts.fit ? chartDisplayScale(host) : (): number => 1;
   // Landscape scrubber overlay (present only when opts.fit renders the rail).
   const rail = host.querySelector<HTMLElement>(".scrub-rail");
   const grab = host.querySelector<HTMLElement>(".scrub-grab");
@@ -923,7 +896,7 @@ export function renderMapPanelGraph(
   const readoutPop = host.querySelector<HTMLElement>(".readout-pop");
   const applyFit = (): void => {
     if (!opts.fit || !fitEl) return;
-    scaleChartTo(host, L.height, fitEl.clientHeight);
+    fitChart(host, L.height, fitEl.clientHeight);
     // Rail mirrors the plot's scaled width; the dot rides the plot-area top
     // edge (y = plotTop·s, minus half the 11px dot).
     if (rail && plot.style.width) {

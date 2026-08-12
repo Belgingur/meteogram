@@ -2,15 +2,24 @@ import { describe, expect, it } from "vitest";
 
 import {
   ARROW_STRIP_MIN,
+  CHART_FIT_SELECTORS,
+  fittedLaneY,
+  fittedWidth,
   hasArrowStrip,
   LEGACY_COMPACT_SPEC,
   LEGACY_FULLSCREEN_SPEC,
+  MIN_FIT_HEIGHT,
+  resolveChartFit,
   resolveYrBands,
   YR_SPEC,
   yrHeaderBaselines,
   yrLaneChipY,
   type YrSpec,
 } from "../src/layout";
+import { labels } from "../src/i18n";
+import { fullscreenOverlayHtml } from "../src/map-panel-graph";
+import { weatherSymbolCode } from "../src/symbol-code";
+import type { HourPoint } from "../src/types";
 
 /** Chart heights the yr renderer is asked for across the four surfaces. */
 const HEIGHTS = [140, 180, 200, 262, 360, 560, 900, 1400];
@@ -147,6 +156,82 @@ describe("yrHeaderBaselines", () => {
       dayLabelY: 15,
       hourLabelY: 32,
     });
+  });
+});
+
+describe("resolveChartFit", () => {
+  it("scales the chart's base height onto the space available", () => {
+    expect(resolveChartFit(560, 280)).toEqual({ scale: 0.5, heightPx: 280 });
+    expect(resolveChartFit(262, 524)).toEqual({ scale: 2, heightPx: 524 });
+  });
+
+  it("declines to fit into a space too small to be worth it", () => {
+    expect(resolveChartFit(560, MIN_FIT_HEIGHT - 1)).toBeNull();
+    expect(resolveChartFit(0, 400)).toBeNull();
+    expect(resolveChartFit(560, 0)).toBeNull();
+  });
+});
+
+describe("fitted dimensions", () => {
+  it("keeps widths fractional so the drawing agrees with the pointer maths", () => {
+    // The regression: rounding the width made the horizontal scale
+    // round(w·s)/w instead of s, so the scrub cursor drifted further from its
+    // column the further right you scrubbed.
+    const fit = resolveChartFit(560, 331)!;
+    const width = fittedWidth(1234, fit);
+    expect(width).not.toBe(Math.round(width));
+    expect(width / 1234).toBe(fit.scale);
+  });
+
+  it("moves lane chips by exactly the same scale as the plot", () => {
+    const fit = resolveChartFit(262, 200)!;
+    for (const baseY of [48, 120, 190]) {
+      expect(fittedLaneY(baseY, fit) / baseY).toBeCloseTo(fit.scale, 10);
+    }
+  });
+
+  it("is an identity at scale 1", () => {
+    const fit = resolveChartFit(262, 262)!;
+    expect(fittedWidth(500, fit)).toBe(500);
+    expect(fittedLaneY(48, fit)).toBe(48);
+  });
+});
+
+describe("CHART_FIT_SELECTORS", () => {
+  const points: HourPoint[] = Array.from({ length: 12 }, (_, i) => ({
+    local: new Date(Date.UTC(2026, 7, 12, i)),
+    utcMs: Date.UTC(2026, 7, 12, i),
+    tempC: 8 + i * 0.5,
+    precipMm: 0.4,
+    precipMaxMm: 0.8,
+    windMs: 5,
+    gustMs: 9,
+    dirDeg: 180,
+    symbol: weatherSymbolCode(0, 0.5, 0, 1),
+  }));
+
+  it("covers every SVG the chart renders", () => {
+    // The bug this guards: the chart draws three SVGs that share one y-scale,
+    // but the overlay's fit only ever stretched two of them, leaving the
+    // right-hand precip axis at full height with its ticks off the gridlines.
+    const html = fullscreenOverlayHtml(points, {
+      scrubIdx: 0,
+      nowIdx: 0,
+      anaIdx: 0,
+      onScrub: () => {},
+      t: labels("is"),
+    });
+    const rendered = [...html.matchAll(/<svg class="(yr-[\w-]+)"/g)].map(
+      (m) => `.${m[1]}`,
+    );
+    expect(rendered.sort()).toEqual([".yr-axis", ".yr-axis-right", ".yr-plot"]);
+    for (const selector of rendered) {
+      expect(CHART_FIT_SELECTORS).toContain(selector);
+    }
+  });
+
+  it("lists the plot itself, which anchors the scale", () => {
+    expect(CHART_FIT_SELECTORS).toContain(".yr-plot");
   });
 });
 

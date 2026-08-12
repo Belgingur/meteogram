@@ -124,6 +124,64 @@ export function hasArrowStrip(bands: YrBands): boolean {
   return bands.height - bands.plotBottom >= ARROW_STRIP_MIN;
 }
 
+/**
+ * A phone in landscape gives the chart column only ~120–230px of visible
+ * height; a low floor keeps a chart filling its space rather than clipping.
+ */
+export const MIN_FIT_HEIGHT = 60;
+
+/**
+ * Every SVG that makes up one chart. All of them are stretched by the same
+ * fit, because they share the plot's y-scale — the left value axis, the plot
+ * itself, and the right-hand precipitation axis.
+ *
+ * Declared here rather than written out at the call site so that adding a
+ * fourth strip to the chart cannot silently leave it unscaled. That is exactly
+ * how the expanded overlay ended up stretching its plot while its precip axis
+ * stayed at full height, pointing the mm ticks at the wrong gridlines.
+ */
+export const CHART_FIT_SELECTORS = [
+  ".yr-axis",
+  ".yr-plot",
+  ".yr-axis-right",
+] as const;
+
+/** The uniform scale from a chart's base coordinates to screen pixels. */
+export interface ChartFit {
+  scale: number;
+  heightPx: number;
+}
+
+/**
+ * Work out how to fit a `baseHeight` chart into `availH` px, or null when the
+ * space is too small to be worth scaling into.
+ */
+export function resolveChartFit(
+  baseHeight: number,
+  availH: number,
+  minHeight: number = MIN_FIT_HEIGHT,
+): ChartFit | null {
+  if (!(baseHeight > 0) || !(availH >= minHeight)) return null;
+  return { scale: availH / baseHeight, heightPx: availH };
+}
+
+/**
+ * Width of a chart element under a fit — deliberately fractional.
+ *
+ * Rounding here would make the horizontal scale `round(w·s)/w` rather than `s`,
+ * so the drawing would no longer agree with the `s` that the pointer and scroll
+ * maths multiply by: the scrub cursor lands beside the column it names, and by
+ * a little more the further right you scrub.
+ */
+export function fittedWidth(baseWidth: number, fit: ChartFit): number {
+  return baseWidth * fit.scale;
+}
+
+/** Y offset of a sticky lane chip under a fit. Fractional, for the same reason. */
+export function fittedLaneY(baseY: number, fit: ChartFit): number {
+  return baseY * fit.scale;
+}
+
 /** Gap between the hour-label baseline and the top of the plot. */
 const HOUR_LABEL_GAP = 8;
 
