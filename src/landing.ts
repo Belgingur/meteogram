@@ -246,26 +246,6 @@ export function formatUtcMetaTime(d: Date, t: Labels): string {
 }
 
 /**
- * Desktop panel header (1b): forecast/location selector chip on the left,
- * optional close ✕ on the right. The chip opens the same settings overlay as
- * the mobile pill (so it carries the `.pill` class the component wires).
- */
-export function panelHeaderHtml(
-  summary: string,
-  closable: boolean,
-  t: Labels,
-): string {
-  const close = closable
-    ? `<button class="header-close" type="button" aria-label="${esc(t.close)}">${closeSvg}</button>`
-    : "";
-  return `
-    <div class="panel-header">
-      <button class="pill panel-pill" type="button"><span>${esc(summary)}</span>${chevronSmall}</button>
-      ${close}
-    </div>`;
-}
-
-/**
  * Map-panel 2a header: drag grip + selector chip + close. The header row is
  * the drag handle (`data-drag-handle`).
  */

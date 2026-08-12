@@ -249,27 +249,3 @@ export const YR_SPEC: YrSpec = {
   gap: 16,
   wind: 68,
 };
-
-/**
- * The docked panel's original bands, kept so the tests can show exactly what
- * moved when the two charts were unified. Not used by the renderer.
- */
-export const LEGACY_COMPACT_SPEC: YrSpec = {
-  headerPx: 40,
-  arrowsPx: 12,
-  temp: 126,
-  gap: 16,
-  wind: 68,
-};
-
-/**
- * The expanded overlay's original bands. Not used by the renderer — see
- * {@link LEGACY_COMPACT_SPEC}.
- */
-export const LEGACY_FULLSCREEN_SPEC: YrSpec = {
-  headerPx: 66,
-  arrowsPx: 74,
-  temp: 254,
-  gap: 36,
-  wind: 130,
-};
