@@ -18,6 +18,14 @@ import {
   TICK_LABEL_DY,
   windTicksFor,
 } from "./render";
+import {
+  ARROW_STRIP_MIN,
+  resolveYrBands,
+  YR_SPEC,
+  yrHeaderBaselines,
+  yrLaneChipY,
+  type YrSpec,
+} from "./layout";
 import { symbolUrl } from "./symbols";
 import type { HourPoint } from "./types";
 
@@ -65,22 +73,33 @@ interface YrLayout {
   laneChipY: [number, number, number];
 }
 
+/**
+ * Band boundaries for one chart height, plus the precipitation baseline —
+ * which is the temperature lane's baseline, since the bars hang off it.
+ */
+function yrBandsFor(
+  spec: YrSpec,
+  height: number,
+  chrome: { dayLabelSize: number; precipCap: number },
+) {
+  const bands = resolveYrBands(spec, height);
+  return {
+    ...bands,
+    precipBase: bands.tempBase,
+    ...yrHeaderBaselines(bands, chrome.dayLabelSize),
+    laneChipY: yrLaneChipY(bands, chrome.precipCap),
+  };
+}
+
 const YR_COMPACT: YrLayout = {
   colW: 26,
-  height: 262,
   axisW: 46,
-  plotTop: 40,
-  plotBottom: 250,
-  tempTop: 40,
-  tempBase: 166,
+  ...yrBandsFor(YR_SPEC, 262, { dayLabelSize: 13, precipCap: 44 }),
   tempLo: 0,
   tempHi: 10,
   tempTicks: [0, 5, 10],
-  windTop: 182,
-  windBase: 250,
   windMax: 15,
   windTicks: [5, 10],
-  precipBase: 166,
   precipPerMm: 22,
   precipCap: 44,
   precipMaxW: 16,
@@ -88,9 +107,7 @@ const YR_COMPACT: YrLayout = {
   symbolScale: 0.58,
   symbolSize: 20,
   plotPad: 8,
-  dayLabelY: 15,
   dayLabelSize: 13,
-  hourLabelY: 32,
   hourLabelSize: 10,
   tempLabelEvery: 0,
   windLabelEvery: 0,
@@ -99,25 +116,17 @@ const YR_COMPACT: YrLayout = {
   gridEvery: 2,
   tempStroke: 2.4,
   windStroke: 2.1,
-  laneChipY: [48, 120, 190],
 };
 
 const YR_FULLSCREEN: YrLayout = {
   colW: 42,
-  height: 560,
   axisW: 52,
-  plotTop: 66,
-  plotBottom: 486,
-  tempTop: 66,
-  tempBase: 320,
+  ...yrBandsFor(YR_SPEC, 560, { dayLabelSize: 16, precipCap: 84 }),
   tempLo: 0,
   tempHi: 10,
   tempTicks: [0, 5, 10],
-  windTop: 356,
-  windBase: 486,
   windMax: 20,
   windTicks: [5, 10, 15, 20],
-  precipBase: 320,
   precipPerMm: 40,
   precipCap: 84,
   precipMaxW: 18,
@@ -125,9 +134,7 @@ const YR_FULLSCREEN: YrLayout = {
   symbolScale: 0.82,
   symbolSize: 26,
   plotPad: 16,
-  dayLabelY: 24,
   dayLabelSize: 16,
-  hourLabelY: 54,
   hourLabelSize: 11,
   // No inline temp/wind value labels on the lines — every other view (compact
   // desktop, landscape) omits them, so the expanded two-column view matches
@@ -139,7 +146,6 @@ const YR_FULLSCREEN: YrLayout = {
   gridEvery: 1,
   tempStroke: 2.8,
   windStroke: 2.4,
-  laneChipY: [74, 200, 360],
 };
 
 export interface YrGeometry {
@@ -263,7 +269,7 @@ function tempSpan(L: YrLayout): number {
 /** Y for wind-direction arrows — dedicated strip below plot or inside wind lane. */
 function windArrowY(L: YrLayout): number {
   const tail = L.height - L.plotBottom;
-  if (tail >= 22) return L.plotBottom + tail / 2;
+  if (tail >= ARROW_STRIP_MIN) return L.plotBottom + tail / 2;
   return L.windBase - 14;
 }
 
