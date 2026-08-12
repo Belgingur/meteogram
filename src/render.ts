@@ -224,6 +224,39 @@ export const PRECIP_TICK_COLOR = "#3D82C4";
 /** Precipitation tick + gridline values, in mm */
 export const PRECIP_TICKS: readonly number[] = [1, 2];
 
+/** Minimum vertical gap between two tick labels before they read as crowded */
+export const TICK_MIN_GAP = 22;
+
+/**
+ * Precipitation ticks for a lane that can draw up to `maxMm` before its bars
+ * hit their cap.
+ *
+ * The old fixed [1, 2] happened to be right for both charts, because both cap
+ * at ~2mm — but it was fixed, so any change to `precipCap` or `precipPerMm`
+ * would have left the axis labelling millimetres the bars can no longer reach,
+ * or stopping short of ones they can.
+ */
+export function precipTicksFor(maxMm: number): number[] {
+  if (!(maxMm > 0)) return [];
+  const steps = [0.5, 1, 2, 5, 10, 20];
+  const step =
+    steps.find((s) => Math.floor(maxMm / s) <= 3) ?? steps[steps.length - 1];
+  const ticks: number[] = [];
+  for (let v = step; v <= maxMm + 1e-9; v += step) {
+    ticks.push(Number(v.toFixed(2)));
+  }
+  return ticks;
+}
+
+/**
+ * How many labels fit in `lanePx` without crowding, clamped to `[2, max]`.
+ * Feeding this the on-screen pixel count — not the base-geometry one — is what
+ * keeps a scaled-down landscape chart from carrying a desktop's worth of ticks.
+ */
+export function maxLabelsFor(lanePx: number, max = 8): number {
+  return Math.max(2, Math.min(max, Math.floor(lanePx / TICK_MIN_GAP)));
+}
+
 /**
  * Baseline offset that drops a tick label onto its gridline: SVG text sits on
  * its baseline, so half the cap height has to be added back to centre it.

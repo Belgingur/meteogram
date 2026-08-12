@@ -8,7 +8,10 @@ import {
   LAYOUT_FULL,
   type MeteogramLayout,
   PRECIP_TICK_COLOR,
+  maxLabelsFor,
   PRECIP_TICKS,
+  precipTicksFor,
+  TICK_MIN_GAP,
   TICK_LABEL_DY,
   windTicksFor,
 } from "../src/render";
@@ -175,6 +178,70 @@ describe("windTicksFor — the shared wind tick rule", () => {
         expect(step % 5 === 0 || step <= 2, where).toBe(true);
         expect((step / max) * lanePx, where).toBeGreaterThanOrEqual(MIN_GAP);
       }
+    }
+  });
+});
+
+describe("precipTicksFor — the precipitation ladder", () => {
+  it("reproduces the fixed [1, 2] both charts were built around", () => {
+    // Compact caps at 44px / 22px-per-mm and fullscreen at 84 / 40 — both ~2mm.
+    expect(precipTicksFor(44 / 22)).toEqual([1, 2]);
+    expect(precipTicksFor(84 / 40)).toEqual([1, 2]);
+  });
+
+  it("never labels a millimetre the bars cannot reach", () => {
+    for (const maxMm of [0.4, 0.9, 1.5, 2, 3, 6, 12, 40]) {
+      for (const mm of precipTicksFor(maxMm)) {
+        expect(mm, `maxMm=${maxMm}`).toBeLessThanOrEqual(maxMm + 1e-9);
+        expect(mm).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it("keeps the ladder short and evenly stepped at any cap", () => {
+    for (const maxMm of [0.4, 1, 2, 5, 9, 20, 60]) {
+      const ticks = precipTicksFor(maxMm);
+      const where = `maxMm=${maxMm} → ${ticks.join(",")}`;
+      expect(ticks.length, where).toBeLessThanOrEqual(3);
+      if (ticks.length > 1) {
+        const step = ticks[0];
+        expect(ticks, where).toEqual(ticks.map((_, i) => (i + 1) * step));
+      }
+    }
+  });
+
+  it("returns nothing for a lane that cannot draw a bar", () => {
+    expect(precipTicksFor(0)).toEqual([]);
+    expect(precipTicksFor(-1)).toEqual([]);
+  });
+});
+
+describe("maxLabelsFor — tick density from on-screen pixels", () => {
+  it("thins the ladder as a chart is scaled down", () => {
+    // The regression: density was chosen from the base geometry, so a landscape
+    // phone squeezed into a third of the height still got a desktop's label
+    // count. 294px is the expanded chart's temperature lane.
+    const laneAt = (scale: number) => maxLabelsFor(294 * scale);
+    expect(laneAt(0.35)).toBeLessThan(laneAt(1));
+    // ...and it never goes back up on the way down.
+    const scales = [1, 0.8, 0.6, 0.45, 0.3, 0.2];
+    const counts = scales.map(laneAt);
+    for (let i = 1; i < counts.length; i++) {
+      expect(counts[i]).toBeLessThanOrEqual(counts[i - 1]);
+    }
+  });
+
+  it("never asks for fewer than two labels or more than the cap", () => {
+    for (const px of [0, 5, 21, 22, 100, 400, 5000]) {
+      expect(maxLabelsFor(px)).toBeGreaterThanOrEqual(2);
+      expect(maxLabelsFor(px)).toBeLessThanOrEqual(8);
+    }
+    expect(maxLabelsFor(400, 4)).toBeLessThanOrEqual(4);
+  });
+
+  it("keeps every label at least the minimum gap apart", () => {
+    for (const px of [44, 66, 120, 294, 600]) {
+      expect(px / maxLabelsFor(px)).toBeGreaterThanOrEqual(TICK_MIN_GAP - 1e-9);
     }
   });
 });
