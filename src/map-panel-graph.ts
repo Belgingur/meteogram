@@ -11,8 +11,9 @@ import {
   formatTempTick,
   formatWindTick,
   hasGustSeries,
+  maxLabelsFor,
   PRECIP_TICK_COLOR,
-  PRECIP_TICKS,
+  precipTicksFor,
   temperatureTicks,
   TICK_COLOR,
   TICK_LABEL_DY,
@@ -42,6 +43,10 @@ interface YrLayout {
   colW: number;
   height: number;
   axisW: number;
+  /** Width of the pinned right-hand precipitation strip */
+  rightAxisW: number;
+  /** Type size of the numeric tick labels in both gutters */
+  axisFont: number;
   plotTop: number;
   plotBottom: number;
   tempTop: number;
@@ -98,6 +103,8 @@ function yrBandsFor(
 const YR_COMPACT: YrLayout = {
   colW: 26,
   axisW: 46,
+  rightAxisW: 24,
+  axisFont: 9.5,
   ...yrBandsFor(YR_SPEC, 262, { dayLabelSize: 13, precipCap: 44 }),
   tempLo: 0,
   tempHi: 10,
@@ -125,6 +132,8 @@ const YR_COMPACT: YrLayout = {
 const YR_FULLSCREEN: YrLayout = {
   colW: 42,
   axisW: 52,
+  rightAxisW: 28,
+  axisFont: 11,
   ...yrBandsFor(YR_SPEC, 560, { dayLabelSize: 16, precipCap: 84 }),
   tempLo: 0,
   tempHi: 10,
@@ -228,7 +237,14 @@ function nightBands(
   return bands;
 }
 
-/** Nice-step temp domain for the yr axis; compact keeps ≤4 gutter labels. */
+/**
+ * Nice-step temp domain for the yr axis, thinned to at most `maxLabels`.
+ *
+ * Two values are never thinned away: the top of the scale, which is the number
+ * a reader looks for first (the day's peak sits in the top step nearly every
+ * time), and 0°C, which is where water freezes and the one gridline on the
+ * chart that means something in itself.
+ */
 function yrTempScale(
   points: HourPoint[],
   maxLabels: number,
@@ -245,15 +261,33 @@ function yrTempScale(
   // Too many nice ticks: subsample evenly (keep the nice step spacing) rather
   // than linear-interpolating, which produced uneven labels like 8·10·11·13.
   const stride = Math.ceil((all.length - 1) / (maxLabels - 1));
-  const ticks: number[] = [];
-  for (let i = 0; i < all.length; i += stride) ticks.push(all[i]);
-  if (ticks[ticks.length - 1] !== hi) ticks.push(hi);
+  const kept = new Set<number>();
+  for (let i = 0; i < all.length; i += stride) kept.add(all[i]);
+  kept.add(hi);
+  if (lo < 0 && hi > 0 && all.includes(0)) kept.add(0);
+  const ticks = [...kept].sort((a, b) => a - b);
   return { lo, hi, ticks };
 }
 
-function resolveYrLayout(base: YrLayout, points: HourPoint[]): YrLayout {
-  const maxLabels = base.colW >= 40 ? 8 : 6;
-  const { lo, hi, ticks } = yrTempScale(points, maxLabels);
+/**
+ * Fill in the data-dependent parts of a layout: the temperature domain and
+ * both tick ladders.
+ *
+ * `displayScale` is how much the chart will be stretched on screen — pass the
+ * fit's scale, not 1, whenever the chart is fitted. Tick density is a question
+ * about pixels the reader actually sees: choosing it from the base geometry
+ * gave a landscape phone scaled to 0.6 the same number of labels as a desktop
+ * panel at 1.0, crammed into 60% of the room.
+ */
+function resolveYrLayout(
+  base: YrLayout,
+  points: HourPoint[],
+  displayScale = 1,
+): YrLayout {
+  const scale = displayScale > 0 ? displayScale : 1;
+  const tempLanePx = (base.tempBase - base.tempTop) * scale;
+  const windLanePx = (base.windBase - base.windTop) * scale;
+  const { lo, hi, ticks } = yrTempScale(points, maxLabelsFor(tempLanePx));
   return {
     ...base,
     tempLo: lo,
@@ -261,8 +295,15 @@ function resolveYrLayout(base: YrLayout, points: HourPoint[]): YrLayout {
     tempTicks: ticks,
     // Derived from the shared tick rule rather than hardcoded per layout, so the
     // wind scale reads the same here as on the mobile chart.
-    windTicks: windTicksFor(base.windMax, base.windBase - base.windTop),
+    windTicks: windTicksFor(base.windMax, windLanePx),
   };
+}
+
+/** Whether two resolved layouts would draw the same ladders in both gutters. */
+function sameTicks(a: YrLayout, b: YrLayout): boolean {
+  const same = (x: number[], y: number[]): boolean =>
+    x.length === y.length && x.every((v, i) => v === y[i]);
+  return same(a.tempTicks, b.tempTicks) && same(a.windTicks, b.windTicks);
 }
 
 function tempSpan(L: YrLayout): number {
@@ -277,7 +318,7 @@ function windArrowY(L: YrLayout): number {
   return L.windBase - 14;
 }
 
-function buildAxisSvg(L: YrLayout, fullscreen: boolean): string {
+function buildAxisSvg(L: YrLayout): string {
   const ty = (v: number): number =>
     L.tempBase - ((v - L.tempLo) / tempSpan(L)) * (L.tempBase - L.tempTop);
   const wy = (v: number): number =>
@@ -288,7 +329,7 @@ function buildAxisSvg(L: YrLayout, fullscreen: boolean): string {
   const ax = L.axisW - 5;
   for (const v of L.tempTicks) {
     parts.push(
-      text(ax, ty(v) + TICK_LABEL_DY, formatTempTick(v), TICK_COLOR, fullscreen ? 11 : 9.5, 700, "end"),
+      text(ax, ty(v) + TICK_LABEL_DY, formatTempTick(v), TICK_COLOR, L.axisFont, 700, "end"),
     );
   }
   // Precip shares the temperature baseline, so numeric precip ticks in this
@@ -296,7 +337,7 @@ function buildAxisSvg(L: YrLayout, fullscreen: boolean): string {
   // the legend + the exact mm in the scrub readout instead.
   for (const v of L.windTicks) {
     parts.push(
-      text(ax, wy(v) + TICK_LABEL_DY, formatWindTick(v), TICK_COLOR, fullscreen ? 11 : 9.5, 700, "end"),
+      text(ax, wy(v) + TICK_LABEL_DY, formatWindTick(v), TICK_COLOR, L.axisFont, 700, "end"),
     );
   }
   // No rotated "Hiti (°C)" / "Vindur (m/s)" axis titles: they only rendered in
@@ -311,14 +352,14 @@ function buildAxisSvg(L: YrLayout, fullscreen: boolean): string {
  * (they'd collide with the temp labels) — they go here instead, in the precip
  * blue, and stay fixed while the chart scrolls horizontally.
  */
-function buildRightAxisSvg(L: YrLayout, fullscreen: boolean): string {
-  const rightW = fullscreen ? 28 : 24;
+function buildRightAxisSvg(L: YrLayout): string {
+  const rightW = L.rightAxisW;
   const ph = (mm: number): number => Math.min(L.precipCap, mm * L.precipPerMm);
-  const size = fullscreen ? 11 : 9.5;
+  const size = L.axisFont;
   const parts: string[] = [
     `<rect x="0" y="0" width="${rightW}" height="${L.height}" fill="#fff"/>`,
   ];
-  for (const mm of PRECIP_TICKS) {
+  for (const mm of precipTicksFor(L.precipCap / L.precipPerMm)) {
     parts.push(
       text(
         5,
@@ -378,7 +419,7 @@ function buildPlotSvg(
     );
   }
   // Faint dashed precip gridlines (mm) so the right-hand precip scale is readable.
-  for (const mm of PRECIP_TICKS) {
+  for (const mm of precipTicksFor(L.precipCap / L.precipPerMm)) {
     const y = L.precipBase - ph(mm);
     parts.push(
       `<line x1="0" x2="${width}" y1="${y}" y2="${y}" stroke="#CFE0F1" stroke-width="1" stroke-dasharray="2 3"/>`,
@@ -678,13 +719,12 @@ function chartBlock(
   scrubIdx: number,
   nowIdx: number,
   anaIdx: number,
-  base: YrLayout,
+  L: YrLayout,
   fullscreen: boolean,
   withRail = false,
 ): string {
-  const L = resolveYrLayout(base, points);
-  const axis = buildAxisSvg(L, fullscreen);
-  const rightAxis = buildRightAxisSvg(L, fullscreen);
+  const axis = buildAxisSvg(L);
+  const rightAxis = buildRightAxisSvg(L);
   const { svg, geo } = buildPlotSvg(points, t, scrubIdx, nowIdx, anaIdx, L);
   const chips =
     laneChip(L.laneChipY[0], "temp", t.laneTemp) +
@@ -873,15 +913,35 @@ export function renderMapPanelGraph(
   // Expanded panel uses the taller fullscreen layout so the graph fills the
   // extra vertical room; the docked card uses the compact one.
   const fs = opts.expanded ?? false;
-  const L = resolveYrLayout(fs ? YR_FULLSCREEN : YR_COMPACT, points);
-  host.innerHTML = `
+  const base = fs ? YR_FULLSCREEN : YR_COMPACT;
+
+  const paint = (displayScale: number): YrLayout => {
+    const resolved = resolveYrLayout(base, points, displayScale);
+    host.innerHTML = `
     <div class="graph-bare graph-yr">
       ${readoutHtml(points, Math.max(0, Math.min(points.length - 1, opts.scrubIdx)), opts.t, true, fs, opts.fit ?? false)}
       <div class="yr-chart-fit">
-        ${chartBlock(points, opts.t, opts.scrubIdx, opts.nowIdx, opts.anaIdx, L, fs, opts.fit ?? false)}
+        ${chartBlock(points, opts.t, opts.scrubIdx, opts.nowIdx, opts.anaIdx, resolved, fs, opts.fit ?? false)}
       </div>
       ${legendHtml(opts.t, opts.metaLine, hasGustSeries(points))}
     </div>`;
+    return resolved;
+  };
+
+  // A fitted chart has to be measured before its tick density can be chosen,
+  // and it has to be in the document to be measured. So paint once at 1:1, ask
+  // the box how tall it is, and repaint only if the ticks the reader would
+  // actually see differ — otherwise a landscape phone scaled to 0.6 carries a
+  // desktop's worth of labels in 60% of the room.
+  let L = paint(1);
+  if (opts.fit) {
+    const box = host.querySelector<HTMLElement>(".yr-chart-fit");
+    const fit = box ? resolveChartFit(L.height, box.clientHeight) : null;
+    if (fit) {
+      const scaled = resolveYrLayout(base, points, fit.scale);
+      if (!sameTicks(scaled, L)) L = paint(fit.scale);
+    }
+  }
 
   let idx = Math.max(0, Math.min(points.length - 1, opts.scrubIdx));
   const plot = host.querySelector<SVGSVGElement>(".yr-plot")!;
@@ -1141,7 +1201,7 @@ export function fullscreenOverlayHtml(
           <div class="fs-right">
             ${leftHtml ? `<div class="fs-graph-head">${esc(t.next48)}</div>` : ""}
             <div class="fs-chart-area">
-              ${chartBlock(points, t, opts.scrubIdx, opts.nowIdx, opts.anaIdx, YR_FULLSCREEN, true)}
+              ${chartBlock(points, t, opts.scrubIdx, opts.nowIdx, opts.anaIdx, resolveYrLayout(YR_FULLSCREEN, points), true)}
             </div>
             ${legendHtml(t, undefined, hasGustSeries(points))}
           </div>
