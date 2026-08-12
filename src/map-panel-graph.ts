@@ -20,10 +20,10 @@ import {
   windTicksFor,
 } from "./render";
 import {
-  ARROW_STRIP_MIN,
   CHART_FIT_SELECTORS,
   fittedLaneY,
   fittedWidth,
+  hasArrowStrip,
   resolveChartFit,
   resolveYrBands,
   YR_SPEC,
@@ -314,7 +314,7 @@ function tempSpan(L: YrLayout): number {
 /** Y for wind-direction arrows — dedicated strip below plot or inside wind lane. */
 function windArrowY(L: YrLayout): number {
   const tail = L.height - L.plotBottom;
-  if (tail >= ARROW_STRIP_MIN) return L.plotBottom + tail / 2;
+  if (hasArrowStrip(L)) return L.plotBottom + tail / 2;
   return L.windBase - 14;
 }
 
@@ -713,7 +713,11 @@ function chartDisplayScale(root: HTMLElement): () => number {
   };
 }
 
-function chartBlock(
+/**
+ * One rendered chart: the pinned left axis, the scrolling plot and the pinned
+ * right axis, in the flex row that keeps them aligned.
+ */
+export function chartBlock(
   points: HourPoint[],
   t: Labels,
   scrubIdx: number,
@@ -826,82 +830,6 @@ function readoutHtml(
         ${popupBtns}
       </div>
     </div>`;
-}
-
-function wireFullscreenScrub(
-  root: HTMLElement,
-  points: HourPoint[],
-  opts: MapPanelGraphOptions,
-  L: YrLayout,
-): () => void {
-  let idx = Math.max(0, Math.min(points.length - 1, opts.scrubIdx));
-  const plot = root.querySelector<SVGSVGElement>(".yr-plot")!;
-  const scroll = root.querySelector<HTMLElement>(".yr-scroll")!;
-  const { geo } = buildPlotSvg(
-    points,
-    opts.t,
-    idx,
-    opts.nowIdx,
-    opts.anaIdx,
-    L,
-  );
-  const scaleFn = chartDisplayScale(root);
-  const q = <T extends Element>(sel: string): T => root.querySelector(sel) as T;
-  const update = (): void => {
-    const p = points[idx];
-    const x = geo.cx(idx);
-    // Scoped to the plot: the landscape scrubber adds an HTML .scrub-cursor
-    // sibling inside .yr-scroll that must not shadow this SVG line.
-    q<SVGLineElement>(".yr-plot .scrub-cursor").setAttribute("x1", `${x}`);
-    q<SVGLineElement>(".yr-plot .scrub-cursor").setAttribute("x2", `${x}`);
-    const dotTemp = q<SVGCircleElement>(".scrub-dot-temp");
-    dotTemp.setAttribute("cx", `${x}`);
-    dotTemp.setAttribute("visibility", p.tempC === null ? "hidden" : "visible");
-    if (p.tempC !== null) dotTemp.setAttribute("cy", `${geo.tempY(p.tempC)}`);
-    const dotWind = q<SVGCircleElement>(".scrub-dot-wind");
-    dotWind.setAttribute("cx", `${x}`);
-    dotWind.setAttribute("visibility", p.windMs === null ? "hidden" : "visible");
-    if (p.windMs !== null) dotWind.setAttribute("cy", `${geo.windY(p.windMs)}`);
-  };
-  wireScrub(
-    plot,
-    geo,
-    () => idx,
-    (i) => {
-      idx = i;
-    },
-    opts.onScrub,
-    update,
-    scaleFn,
-  );
-  const refit = (): void => {
-    const area = root.querySelector<HTMLElement>(".fs-chart-area");
-    if (area) fitChart(root, L.height, area.clientHeight);
-    scrollToScrub(scroll, geo, idx, L.colW, scaleFn);
-    update();
-  };
-  refit();
-  return refit;
-}
-
-export function wireFullscreenOverlay(
-  backdrop: HTMLElement,
-  points: HourPoint[],
-  opts: MapPanelGraphOptions,
-  onClose: () => void,
-): void {
-  backdrop.querySelector(".fs-close")?.addEventListener("click", onClose);
-  const refit = wireFullscreenScrub(
-    backdrop,
-    points,
-    opts,
-    resolveYrLayout(YR_FULLSCREEN, points),
-  );
-  const area = backdrop.querySelector<HTMLElement>(".fs-chart-area");
-  if (area && typeof ResizeObserver !== "undefined") {
-    const ro = new ResizeObserver(() => refit());
-    ro.observe(area);
-  }
 }
 
 /** Render the map-panel 2a compact yr-style meteogram into `host`. */
@@ -1166,46 +1094,4 @@ export function renderMapPanelGraph(
       scrollToScrub(scroll, geo, idx, L.colW, scaleFn);
     },
   };
-}
-
-/**
- * Expanded overlay markup — a two-column view mounted as a sibling of .page:
- * left keeps the location header, "weather now" and the hourly table; right
- * opens the large graph. `leftHtml` is composed by the caller from the same
- * now-card / day-chips / table builders the docked panel uses, so the existing
- * day-chip wiring drives day switching here too. Falls back to a graph-only
- * layout when no left column is supplied.
- */
-export function fullscreenOverlayHtml(
-  points: HourPoint[],
-  opts: MapPanelGraphOptions,
-  leftHtml = "",
-): string {
-  const t = opts.t;
-  const meta = opts.metaLine ? `<div class="fs-meta">${esc(opts.metaLine)}</div>` : "";
-  const left = leftHtml
-    ? `<div class="fs-left">${leftHtml}</div>`
-    : "";
-  return `
-    <div class="fs-backdrop${leftHtml ? " fs-backdrop--split" : ""}" role="dialog" aria-modal="true" aria-label="${esc(t.next48)}">
-      <div class="fs-panel">
-        <div class="fs-head">
-          <div>
-            <div class="fs-title">${opts.placeName ? esc(opts.placeName) : esc(t.next48)}</div>
-            ${meta}
-          </div>
-          <button class="fs-close" type="button" aria-label="${esc(t.exitFullscreen)}">${fsCollapseSvg}</button>
-        </div>
-        <div class="fs-body">
-          ${left}
-          <div class="fs-right">
-            ${leftHtml ? `<div class="fs-graph-head">${esc(t.next48)}</div>` : ""}
-            <div class="fs-chart-area">
-              ${chartBlock(points, t, opts.scrubIdx, opts.nowIdx, opts.anaIdx, resolveYrLayout(YR_FULLSCREEN, points), true)}
-            </div>
-            ${legendHtml(t, undefined, hasGustSeries(points))}
-          </div>
-        </div>
-      </div>
-    </div>`;
 }

@@ -6,8 +6,6 @@ import {
   fittedLaneY,
   fittedWidth,
   hasArrowStrip,
-  LEGACY_COMPACT_SPEC,
-  LEGACY_FULLSCREEN_SPEC,
   MIN_FIT_HEIGHT,
   resolveChartFit,
   resolveYrBands,
@@ -17,9 +15,31 @@ import {
   type YrSpec,
 } from "../src/layout";
 import { labels } from "../src/i18n";
-import { fullscreenOverlayHtml } from "../src/map-panel-graph";
+import { chartBlock } from "../src/map-panel-graph";
 import { weatherSymbolCode } from "../src/symbol-code";
 import type { HourPoint } from "../src/types";
+
+/**
+ * The bands each chart was hand-typed with before the spec existed, as the
+ * fixed/flex split that reproduces them. Fixtures, not production values: they
+ * exist so the tests can show the model is faithful and say exactly what the
+ * shared spec moved.
+ */
+const LEGACY_COMPACT_SPEC: YrSpec = {
+  headerPx: 40,
+  arrowsPx: 12,
+  temp: 126,
+  gap: 16,
+  wind: 68,
+};
+
+const LEGACY_FULLSCREEN_SPEC: YrSpec = {
+  headerPx: 66,
+  arrowsPx: 74,
+  temp: 254,
+  gap: 36,
+  wind: 130,
+};
 
 /** Chart heights the yr renderer is asked for across the four surfaces. */
 const HEIGHTS = [140, 180, 200, 262, 360, 560, 900, 1400];
@@ -198,6 +218,39 @@ describe("fitted dimensions", () => {
 });
 
 describe("CHART_FIT_SELECTORS", () => {
+  /** A chart layout resolved the way the renderer resolves one. */
+  const resolveYrLayoutForTest = () => ({
+    colW: 42,
+    axisW: 52,
+    rightAxisW: 28,
+    axisFont: 11,
+    ...resolveYrBands(YR_SPEC, 560),
+    precipBase: resolveYrBands(YR_SPEC, 560).tempBase,
+    ...yrHeaderBaselines(resolveYrBands(YR_SPEC, 560), 16),
+    laneChipY: yrLaneChipY(resolveYrBands(YR_SPEC, 560), 84),
+    tempLo: 0,
+    tempHi: 10,
+    tempTicks: [0, 5, 10],
+    windMax: 20,
+    windTicks: [5, 10, 15, 20],
+    precipPerMm: 40,
+    precipCap: 84,
+    precipMaxW: 18,
+    precipW: 12,
+    symbolScale: 0.82,
+    symbolSize: 26,
+    plotPad: 16,
+    dayLabelSize: 16,
+    hourLabelSize: 11,
+    tempLabelEvery: 0,
+    windLabelEvery: 0,
+    symbolEvery: 2,
+    arrowEvery: 2,
+    gridEvery: 1,
+    tempStroke: 2.8,
+    windStroke: 2.4,
+  });
+
   const points: HourPoint[] = Array.from({ length: 12 }, (_, i) => ({
     local: new Date(Date.UTC(2026, 7, 12, i)),
     utcMs: Date.UTC(2026, 7, 12, i),
@@ -214,13 +267,15 @@ describe("CHART_FIT_SELECTORS", () => {
     // The bug this guards: the chart draws three SVGs that share one y-scale,
     // but the overlay's fit only ever stretched two of them, leaving the
     // right-hand precip axis at full height with its ticks off the gridlines.
-    const html = fullscreenOverlayHtml(points, {
-      scrubIdx: 0,
-      nowIdx: 0,
-      anaIdx: 0,
-      onScrub: () => {},
-      t: labels("is"),
-    });
+    const html = chartBlock(
+      points,
+      labels("is"),
+      0,
+      0,
+      0,
+      resolveYrLayoutForTest(),
+      true,
+    );
     const rendered = [...html.matchAll(/<svg class="(yr-[\w-]+)"/g)].map(
       (m) => `.${m[1]}`,
     );
