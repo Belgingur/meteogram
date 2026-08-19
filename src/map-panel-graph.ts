@@ -26,9 +26,10 @@ import {
   hasArrowStrip,
   resolveChartFit,
   resolveYrBands,
-  YR_SPEC,
   yrHeaderBaselines,
   yrLaneChipY,
+  yrSpecFor,
+  yrSymbolRowY,
   type YrSpec,
 } from "./layout";
 import { symbolUrl } from "./symbols";
@@ -47,6 +48,9 @@ interface YrLayout {
   rightAxisW: number;
   /** Type size of the numeric tick labels in both gutters */
   axisFont: number;
+  /** Weather-symbol row above the plot (from the resolved bands) */
+  symbolTop: number;
+  symbolsPx: number;
   plotTop: number;
   plotBottom: number;
   tempTop: number;
@@ -105,7 +109,7 @@ const YR_COMPACT: YrLayout = {
   axisW: 46,
   rightAxisW: 24,
   axisFont: 9.5,
-  ...yrBandsFor(YR_SPEC, 262, { dayLabelSize: 13, precipCap: 44 }),
+  ...yrBandsFor(yrSpecFor(20), 262, { dayLabelSize: 13, precipCap: 44 }),
   tempLo: 0,
   tempHi: 10,
   tempTicks: [0, 5, 10],
@@ -134,7 +138,7 @@ const YR_FULLSCREEN: YrLayout = {
   axisW: 52,
   rightAxisW: 28,
   axisFont: 11,
-  ...yrBandsFor(YR_SPEC, 560, { dayLabelSize: 16, precipCap: 84 }),
+  ...yrBandsFor(yrSpecFor(26), 560, { dayLabelSize: 16, precipCap: 84 }),
   tempLo: 0,
   tempHi: 10,
   tempTicks: [0, 5, 10],
@@ -478,17 +482,17 @@ function buildPlotSvg(
     }
   }
 
+  // Weather symbols in their own row above the plot, at one height for every
+  // column. They used to hang ~30px off the temperature curve, which put them on
+  // a different line in every column and let them sit on the line and the value
+  // labels; the row is what the meteogram card does, so the two now match.
+  const symbolY = yrSymbolRowY(L, L.symbolSize);
   for (let i = 0; i < n; i += L.symbolEvery) {
     const url = symbolUrl(points[i].symbol);
-    const temp = points[i].tempC;
-    const sy =
-      temp === null
-        ? L.plotTop + 4
-        : Math.max(L.plotTop - 6, ty(temp) - 30);
     if (url) {
       const sz = L.symbolSize;
       parts.push(
-        `<image x="${cx(i) - sz / 2}" y="${sy}" width="${sz}" height="${sz}" href="${esc(url)}"/>`,
+        `<image x="${cx(i) - sz / 2}" y="${symbolY}" width="${sz}" height="${sz}" href="${esc(url)}"/>`,
       );
     }
   }

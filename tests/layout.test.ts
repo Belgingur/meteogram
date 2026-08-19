@@ -27,6 +27,8 @@ import type { HourPoint } from "../src/types";
  */
 const LEGACY_COMPACT_SPEC: YrSpec = {
   headerPx: 40,
+  // The legacy charts had no symbol row — the glyphs floated in the temp lane.
+  symbolsPx: 0,
   arrowsPx: 12,
   temp: 126,
   gap: 16,
@@ -35,6 +37,7 @@ const LEGACY_COMPACT_SPEC: YrSpec = {
 
 const LEGACY_FULLSCREEN_SPEC: YrSpec = {
   headerPx: 66,
+  symbolsPx: 0,
   arrowsPx: 74,
   temp: 254,
   gap: 36,
@@ -52,6 +55,8 @@ describe("resolveYrBands", () => {
     // the mechanism's.
     expect(resolveYrBands(LEGACY_COMPACT_SPEC, 262)).toEqual({
       height: 262,
+      symbolTop: 40,
+      symbolsPx: 0,
       plotTop: 40,
       tempTop: 40,
       tempBase: 166,
@@ -61,6 +66,8 @@ describe("resolveYrBands", () => {
     });
     expect(resolveYrBands(LEGACY_FULLSCREEN_SPEC, 560)).toEqual({
       height: 560,
+      symbolTop: 66,
+      symbolsPx: 0,
       plotTop: 66,
       tempTop: 66,
       tempBase: 320,
@@ -76,9 +83,25 @@ describe("resolveYrBands", () => {
     // crushed by how tall the chart happens to be.
     for (const height of HEIGHTS) {
       const bands = resolveYrBands(YR_SPEC, height);
-      expect(bands.plotTop).toBe(YR_SPEC.headerPx);
+      // plotTop is the header plus the symbol row, so the header itself is what
+      // is left when the row it gained is taken back off.
+      expect(bands.plotTop - bands.symbolsPx).toBe(YR_SPEC.headerPx);
       expect(bands.height - bands.plotBottom).toBe(YR_SPEC.arrowsPx);
     }
+  });
+
+  it("keeps the symbol row at full size on every height a chart really uses", () => {
+    // 140px is the robustness probe, not a surface: landscape fit-scales the
+    // 262px compact chart rather than resolving bands that short. Everything a
+    // renderer actually asks for can afford the row.
+    for (const height of HEIGHTS.filter((h) => h >= 180)) {
+      expect(resolveYrBands(YR_SPEC, height).symbolsPx).toBe(YR_SPEC.symbolsPx);
+    }
+    // And when it cannot, the row gives way instead of the header or the arrows.
+    const cramped = resolveYrBands(YR_SPEC, 140);
+    expect(cramped.symbolsPx).toBeLessThan(YR_SPEC.symbolsPx);
+    expect(cramped.plotTop - cramped.symbolsPx).toBe(YR_SPEC.headerPx);
+    expect(cramped.height - cramped.plotBottom).toBe(YR_SPEC.arrowsPx);
   });
 
   it("gives every size the same lane proportions", () => {
@@ -116,6 +139,7 @@ describe("resolveYrBands", () => {
   it("does not compound rounding error down the stack", () => {
     const spec: YrSpec = {
       headerPx: 7,
+      symbolsPx: 0,
       arrowsPx: 5,
       temp: 13,
       gap: 3,
@@ -130,6 +154,7 @@ describe("resolveYrBands", () => {
   it("degrades safely for a spec with no lanes", () => {
     const zero: YrSpec = {
       headerPx: 0,
+      symbolsPx: 0,
       arrowsPx: 0,
       temp: 0,
       gap: 0,
