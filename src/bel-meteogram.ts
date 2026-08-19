@@ -763,7 +763,7 @@ export class BelMeteogram extends HTMLElement {
     if (this.refitRaf) return;
     this.refitRaf = requestAnimationFrame(() => {
       this.refitRaf = 0;
-      const box = this.body.querySelector<HTMLElement>(".yr-chart-fit");
+      const box = this.body.querySelector<HTMLElement>(".chart-fit");
       const h = box?.clientHeight ?? 0;
       if (!h || Math.abs(h - this.refitHeight) < REFIT_QUANTUM) return;
       this.refitHeight = h;
@@ -771,11 +771,11 @@ export class BelMeteogram extends HTMLElement {
       // change with height, so re-rendering must not send the reader back to
       // hour zero (same reason paint() restores it).
       const prevLeft =
-        this.body.querySelector<HTMLElement>(".yr-scroll")?.scrollLeft ?? 0;
+        this.body.querySelector<HTMLElement>(".chart-scroll")?.scrollLeft ?? 0;
       const { landscape, wide, expanded } = this.layoutFlags();
       this.paintGraphHost(landscape, expanded, wide, this.t);
       if (prevLeft > 0) {
-        const next = this.body.querySelector<HTMLElement>(".yr-scroll");
+        const next = this.body.querySelector<HTMLElement>(".chart-scroll");
         if (next) next.scrollLeft = prevLeft;
       }
     });
@@ -803,7 +803,7 @@ export class BelMeteogram extends HTMLElement {
     // the graph shows all 48 h and doesn't change when you pick a different day
     // on the left, but the re-render re-centres it — so it appeared to jump to a
     // random spot. Restoring scrollLeft keeps it exactly where it was.
-    const prevGraph = this.body.querySelector<HTMLElement>(".yr-scroll");
+    const prevGraph = this.body.querySelector<HTMLElement>(".chart-scroll");
     const prevLeft = prevGraph?.scrollLeft ?? 0;
     if (this.isFull) this.paintFull();
     else this.paintGraph();
@@ -814,7 +814,7 @@ export class BelMeteogram extends HTMLElement {
       if (nextScroller) nextScroller.scrollTop = prevTop;
     }
     if (prevLeft > 0) {
-      const nextGraph = this.body.querySelector<HTMLElement>(".yr-scroll");
+      const nextGraph = this.body.querySelector<HTMLElement>(".chart-scroll");
       if (nextGraph) nextGraph.scrollLeft = prevLeft;
     }
   }
@@ -1012,7 +1012,7 @@ export class BelMeteogram extends HTMLElement {
       ? ""
       : `<div class="panel-resize panel-resize-bl" data-resize-handle data-corner="bl" role="separator" aria-label="Resize" title="${esc(t.resize)}"></div>
          <div class="panel-resize panel-resize-br" data-resize-handle data-corner="br" role="separator" aria-label="Resize" title="${esc(t.resize)}"></div>`;
-    // Desktop (map-panel 2a): draggable panel with yr-style graph. Mobile: v2 sheet.
+    // Desktop (map-panel 2a): draggable panel with the panel graph. Mobile: v2 sheet.
     const page = wide
       ? `<div class="${cls}"${panelStyle}>
            ${draggablePanelHeaderHtml(summary, closable, t)}
@@ -1113,7 +1113,7 @@ export class BelMeteogram extends HTMLElement {
 
   /**
    * Expanded ("bigger") panel body: two columns — left = compact now-card,
-   * day chips and the hourly table; right = the yr-style graph (rendered into
+   * day chips and the hourly table; right = the panel graph (rendered into
    * .graph-host, which brings its own scrub/hover readout). Reuses the docked
    * builders so the existing day-chip wiring drives day switching here too.
    * The meta footer is appended after this by paint(), i.e. below both columns.
@@ -1139,7 +1139,7 @@ export class BelMeteogram extends HTMLElement {
 
   /**
    * Desktop draggable panel body (map-panel 2a): compact now card, equal-width
-   * day chips, Table/Graph switch, table or yr-style meteogram.
+   * day chips, Table/Graph switch, table or panel meteogram.
    */
   private desktopBodyHtml(
     days: DayGroup[],

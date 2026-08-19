@@ -19,7 +19,7 @@ import type { HourPoint } from "../src/types";
 
 /**
  * The value axes are pinned strips mounted OUTSIDE the horizontal scroller, so
- * they stay put while the plot scrolls (matching the desktop .yr-chart). These
+ * they stay put while the plot scrolls (matching the desktop .chart). These
  * tests pin down the two invariants that would silently break that:
  *   1. no tick labels are left inside the scrolling plot, and
  *   2. every tick label shares its y with the gridline it names — which is what

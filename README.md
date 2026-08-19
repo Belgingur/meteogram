@@ -252,7 +252,7 @@ src/
   transform.ts       meteogram.json → per-hour points (timezone shift, precip scaling)
   render.ts          SVG renderer implementing the handoff geometry + scrubber
   layout.ts          chart geometry: band spec → y-coordinates, fit scaling
-  map-panel-graph.ts the docked/expanded panel's yr-style chart
+  map-panel-graph.ts the docked/expanded panel's chart      
   graph-card.ts      graph card: readout, lane chips, legend, scrub wiring
   landing.ts         full mode: now card, day list/chips, day detail, overlay
   symbol-code.ts     weather-variable → yr.no symbol code
