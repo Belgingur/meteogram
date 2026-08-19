@@ -71,6 +71,11 @@ export function timestepHours(points: HourPoint[]): number {
  */
 const CURSOR_LEAD_COLUMNS = 1.5;
 
+/** Gap left between a lane chip's right edge and the cursor it must not cover. */
+const CHIP_CLEARANCE_GAP = 10;
+/** Left inset the chips are pinned at (`.lane-chip-wrap { left: 4px }`). */
+const CHIP_LEFT_INSET = 4;
+
 /** Index of the hour closest to "now"; 0 when the series is in the future */
 export function nowIndex(points: HourPoint[]): number {
   const now = Date.now();
@@ -268,7 +273,21 @@ export function renderGraphCard(
     // measuring 0 would latch a meaningless offset.
     const view = scroller.clientWidth;
     if (!view) return;
-    scroller.scrollLeft = Math.max(0, geo.cx(idx) - CURSOR_LEAD_COLUMNS * layout.colW);
+    // The lead-in has to clear the sticky lane chips, not just look like a
+    // lead-in: they are pinned to the scroller's left edge and sit ON TOP of the
+    // plot, so any column inside their width is a column whose value label the
+    // reader cannot read — and the cursor's column is the one they came for.
+    // Measured rather than assumed, because the chips are HTML and their width
+    // is whatever the translated label needs ("Úrkoma" is wider than "Rain").
+    let chipW = 0;
+    host.querySelectorAll<HTMLElement>(".lane-chip").forEach((el) => {
+      chipW = Math.max(chipW, el.getBoundingClientRect().width);
+    });
+    const lead = Math.max(
+      CURSOR_LEAD_COLUMNS * layout.colW,
+      chipW ? CHIP_LEFT_INSET + chipW + CHIP_CLEARANCE_GAP : 0,
+    );
+    scroller.scrollLeft = Math.max(0, geo.cx(idx) - lead);
     anchored = true;
   };
   anchorCursor();
