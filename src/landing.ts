@@ -246,6 +246,63 @@ export function formatUtcMetaTime(d: Date, t: Labels): string {
 }
 
 /**
+ * A point's UTC offset as a label: `UTC`, `UTC-3`, `UTC+5:45`.
+ *
+ * The chart renders in the FORECAST POINT's zone (see toHourPoints and
+ * meta.location_timezone_offset), while the map timeline around it renders in
+ * the browser's. Both name the same instants, so a reader looking at a remote
+ * point sees two clocks disagree; this is the label that explains which is which.
+ *
+ * The convention is the API's: `local = UTC + offset`, so -180 is UTC−3. That is
+ * the INVERSE of `Date.prototype.getTimezoneOffset()`, which reports +180 for
+ * São Paulo — never route this value through that method or compare the two.
+ *
+ * Returns null when there is no offset to show, so the caller can drop the
+ * segment rather than print a placeholder. The check is explicitly for
+ * null/non-finite, not falsiness: every Icelandic domain sends a legitimate 0.
+ */
+export function formatUtcOffset(
+  minutes: number | null | undefined,
+): string | null {
+  if (minutes === null || minutes === undefined) return null;
+  if (!Number.isFinite(minutes)) return null;
+  if (minutes === 0) return "UTC";
+  const sign = minutes < 0 ? "-" : "+";
+  const abs = Math.abs(minutes);
+  const hours = Math.floor(abs / 60);
+  const mins = abs % 60;
+  // The sign belongs to the hours; the minutes part is always two positive
+  // digits, and absent entirely on a whole hour ("UTC-3", never "UTC-3:00").
+  return mins === 0
+    ? `UTC${sign}${hours}`
+    : `UTC${sign}${hours}:${String(mins).padStart(2, "0")}`;
+}
+
+/**
+ * The panel header's one-line summary: model, place, UI language, and the
+ * point's zone — `BEL-BR · 17.68°S 43.89°W · EN · UTC-3`.
+ *
+ * Segments that have nothing to say are dropped along with their separator, so
+ * a point of unknown zone reads `BEL-BR · … · EN` rather than trailing a bare
+ * middot.
+ */
+export function panelSummary(parts: {
+  modelName: string;
+  place: string;
+  lang: string;
+  tzOffsetMin: number | null | undefined;
+}): string {
+  return [
+    parts.modelName,
+    parts.place,
+    parts.lang,
+    formatUtcOffset(parts.tzOffsetMin),
+  ]
+    .filter((segment): segment is string => !!segment)
+    .join(" · ");
+}
+
+/**
  * Map-panel 2a header: drag grip + selector chip + close. The header row is
  * the drag handle (`data-drag-handle`).
  */
