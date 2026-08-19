@@ -18,6 +18,7 @@ import {
   metaFooterHtml,
   nowCardHtml,
   overlayHtml,
+  panelSummary,
   panelTableHtml,
   pillHtml,
   selDayCardHtml,
@@ -234,6 +235,13 @@ export class BelMeteogram extends HTMLElement {
   /** User-set panel size (0 → use the default 440 × host-height). */
   private panelSize = { w: 0, h: 0 };
   private analysisTime: Date | null = null;
+  /**
+   * The forecast point's UTC offset in minutes, as the API reports it
+   * (`local = UTC + offset`), or null when unknown — sample mode, a failed load,
+   * or a response without the field. Kept raw: the chart already has the offset
+   * baked into its local timestamps, this is what LABELS which zone those are.
+   */
+  private tzOffsetMin: number | null = null;
   private lastModified: Date | null = null;
   private graphScrubSetter: ((i: number) => void) | null = null;
   /** The exact series the mounted chart was drawn from, so that anything acting
@@ -688,6 +696,8 @@ export class BelMeteogram extends HTMLElement {
       this.rawForecasts = forecasts;
       this.rawStations = meta.stations ?? [];
       this.points = toHourPoints(data.data, windowH);
+      const offset = data.data.meta?.location_timezone_offset;
+      this.tzOffsetMin = typeof offset === "number" ? offset : null;
       // "Last update" prefers the body's last_modified, then the HTTP header.
       this.lastModified = data.data.last_modified
         ? new Date(data.data.last_modified)
@@ -953,7 +963,12 @@ export class BelMeteogram extends HTMLElement {
     const closable = this.hasAttribute("closable");
     const { landscape, wide, expanded } = this.layoutFlags();
 
-    const summary = `${model?.name ?? "…"} · ${place} · ${lang.toUpperCase()}`;
+    const summary = panelSummary({
+      modelName: model?.name ?? "…",
+      place,
+      lang: lang.toUpperCase(),
+      tzOffsetMin: this.tzOffsetMin,
+    });
     const sub = isNaN(lat) || isNaN(lon) ? "" : esc(coordLabel(lat, lon, t));
 
     let body = "";
