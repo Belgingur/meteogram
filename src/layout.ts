@@ -2,9 +2,9 @@
  * Chart geometry, expressed as bands rather than hand-tuned pixel tables.
  *
  * The yr-style chart is a vertical stack: chrome above the plot (day header +
- * hour labels), the temperature lane, a gap, the wind lane, and an optional
- * strip below the plot for the wind arrows. Every y-coordinate the renderer
- * needs is a boundary between two of them.
+ * hour labels, then the weather-symbol row), the temperature lane, a gap, the
+ * wind lane, and an optional strip below the plot for the wind arrows. Every
+ * y-coordinate the renderer needs is a boundary between two of them.
  *
  * Those coordinates used to be typed out per size — one table for the 262px
  * docked panel, another for the 560px expanded overlay — which is why the two
@@ -15,10 +15,11 @@
  *
  * The split that matters is fixed versus flexible:
  *
- *  - The **header** holds the day label and the hour-label row, and the
- *    **arrow strip** holds a row of wind arrows. Both are type and glyphs, so
- *    they need the same pixels at every chart height — a taller chart does not
- *    want a taller day label, it wants more room for data.
+ *  - The **header** holds the day label and the hour-label row, the **symbol
+ *    row** holds the weather glyphs, and the **arrow strip** holds a row of
+ *    wind arrows. All three are type and glyphs, so they need the same pixels
+ *    at every chart height — a taller chart does not want a taller day label,
+ *    it wants more room for data.
  *  - The **lanes** are the data, and they take whatever is left, split by
  *    weight.
  *
@@ -33,6 +34,17 @@ export interface YrSpec {
    * is text, and text does not want to grow with the chart.
    */
   headerPx: number;
+  /**
+   * Row between the header and the plot holding the weather symbols. Fixed: it
+   * is a row of glyphs at a per-size pixel size, so it is sized from that glyph
+   * rather than from the chart's height.
+   *
+   * The symbols used to float in the temperature lane, pinned ~30px above the
+   * curve, which put them at a different height in every column and let them
+   * collide with the line, the value labels and each other. A band of their own
+   * is what the meteogram card has always done, and it reads as a row.
+   */
+  symbolsPx: number;
   /**
    * Strip below the plot for wind-direction arrows. Fixed for the same reason.
    * Below {@link ARROW_STRIP_MIN} the renderer falls back to drawing the arrows
@@ -50,6 +62,9 @@ export interface YrSpec {
 /** Resolved y-coordinates for one chart height. */
 export interface YrBands {
   height: number;
+  /** Top of the weather-symbol row, and the height it resolved to. */
+  symbolTop: number;
+  symbolsPx: number;
   plotTop: number;
   tempTop: number;
   tempBase: number;
@@ -88,26 +103,48 @@ export function resolveYrBands(spec: YrSpec, height: number): YrBands {
   const flexTotal = temp + gap + wind;
 
   let headerPx = spec.headerPx;
+  let symbolsPx = spec.symbolsPx;
   let arrowsPx = spec.arrowsPx;
-  const fixed = headerPx + arrowsPx;
+
+  // On a chart too short for all three fixed rows, the symbol row is the first
+  // to yield: the day header and the arrow strip are the rows that tell a reader
+  // WHEN and WHICH WAY, and those must survive at every height. Only once the
+  // symbol row is gone do the other two shrink together (below).
+  const essential = headerPx + arrowsPx;
+  if (height - essential - symbolsPx < MIN_LANE_STACK) {
+    symbolsPx = Math.max(
+      0,
+      Math.min(symbolsPx, height - essential - MIN_LANE_STACK),
+    );
+  }
+
+  const fixed = headerPx + symbolsPx + arrowsPx;
   const available = height - fixed;
   if (available < MIN_LANE_STACK && fixed > 0) {
     const shrink = Math.max(0, height - MIN_LANE_STACK) / fixed;
     headerPx = Math.floor(headerPx * shrink);
+    symbolsPx = Math.floor(symbolsPx * shrink);
     arrowsPx = Math.floor(arrowsPx * shrink);
   }
 
-  const laneStack = Math.max(0, height - headerPx - arrowsPx);
+  const chromeTop = headerPx + symbolsPx;
+  const laneStack = Math.max(0, height - chromeTop - arrowsPx);
   const at = (offset: number): number =>
-    headerPx + (flexTotal > 0 ? Math.round((offset / flexTotal) * laneStack) : 0);
+    chromeTop +
+    (flexTotal > 0 ? Math.round((offset / flexTotal) * laneStack) : 0);
 
-  const plotTop = headerPx;
+  const plotTop = chromeTop;
   const tempBase = at(temp);
   const windTop = at(temp + gap);
   const windBase = at(temp + gap + wind);
 
   return {
     height,
+    // The symbol row sits under the header and above the plot; a spec with
+    // symbolsPx 0 collapses it to a zero-height band at the plot's ceiling,
+    // which is what the pre-band geometry was.
+    symbolTop: headerPx,
+    symbolsPx,
     plotTop,
     // The temperature lane starts at the plot's ceiling; the same edge, named
     // twice because the renderer reads it in two different contexts.
@@ -198,9 +235,12 @@ export function yrHeaderBaselines(
 ): { dayLabelY: number; hourLabelY: number } {
   return {
     dayLabelY: Math.round(dayLabelSize * 1.15),
+    // The hour row sits above the SYMBOL row, not above the plot: those are the
+    // same edge only when there is no symbol row, and anchoring to the plot put
+    // the hours on top of the glyphs.
     hourLabelY: Math.max(
       Math.round(dayLabelSize * 1.15) + 2,
-      bands.plotTop - HOUR_LABEL_GAP,
+      bands.symbolTop - HOUR_LABEL_GAP,
     ),
   };
 }
@@ -244,8 +284,28 @@ export function yrLaneChipY(
  */
 export const YR_SPEC: YrSpec = {
   headerPx: 44,
+  symbolsPx: 26,
   arrowsPx: 26,
   temp: 126,
   gap: 16,
   wind: 68,
 };
+
+/** Breathing room around the glyph in the symbol row. */
+const SYMBOL_ROW_PAD = 6;
+
+/**
+ * {@link YR_SPEC} with its symbol row sized for a given glyph, since glyph size
+ * is per-layout (20px docked, 26px expanded) while everything else is shared.
+ */
+export function yrSpecFor(symbolSize: number): YrSpec {
+  return { ...YR_SPEC, symbolsPx: symbolSize + SYMBOL_ROW_PAD };
+}
+
+/**
+ * Y of a symbol glyph's top edge: centred in the row, or flush with its top when
+ * a very short chart has shrunk the row below the glyph.
+ */
+export function yrSymbolRowY(bands: YrBands, symbolSize: number): number {
+  return bands.symbolTop + Math.max(0, Math.round((bands.symbolsPx - symbolSize) / 2));
+}
