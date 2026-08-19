@@ -569,8 +569,8 @@ export function buildMeteogram(
     `<path d="${linePath(points, (p) => p.tempC, cx, ty)}" fill="none" stroke="#D14B4B" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>`,
   );
 
-  // Weather symbols every 2 h, centered per column
-  for (let i = 0; i < n; i += 2) {
+  // Weather symbols on every timestep, centered per column
+  for (let i = 0; i < n; i += 1) {
     const url = symbolUrl(points[i].symbol);
     if (url) {
       parts.push(
@@ -594,12 +594,11 @@ export function buildMeteogram(
     `<path d="${linePath(points, (p) => p.windMs, cx, wy)}" fill="none" stroke="#3E8E63" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>`,
   );
 
-  // Temperature value labels every 3 h, temp-colored. Placement (above the
-  // curve, or flipped under it near the top of the lane) is tempLabelBaselineY's
-  // job; the halo keeps them readable on the columns that also carry a weather
-  // symbol — labels land on every third hour, symbols on every second, so every
-  // other label shares its column with one.
-  for (let i = 1; i < n; i += 3) {
+  // Temperature value labels on every timestep, temp-colored. Placement (above
+  // the curve, or flipped under it near the top of the lane) is
+  // tempLabelBaselineY's job; the halo keeps them readable, since every column
+  // now carries a weather symbol as well as a label.
+  for (let i = 0; i < n; i += 1) {
     const v = points[i].tempC;
     if (v !== null) {
       parts.push(
@@ -608,13 +607,13 @@ export function buildMeteogram(
     }
   }
 
-  // Wind direction arrows every 3 h, pointing to where the wind blows toward.
+  // Wind direction arrows on every timestep, pointing where the wind blows to.
   // The glyph is drawn tip-down (= pointing south at rotate(0)), so the
   // meteorological from-direction is the rotation: a wind from 0° blows south.
   const ah = L.arrowHalf;
   const k = ah / 7; // scale the arrowhead with the shaft
   const head = `M${(-4 * k).toFixed(1)} ${(2 * k).toFixed(1)} L0 ${(7.5 * k).toFixed(1)} L${(4 * k).toFixed(1)} ${(2 * k).toFixed(1)}`;
-  for (let i = 1; i < n; i += 3) {
+  for (let i = 0; i < n; i += 1) {
     const dir = points[i].dirDeg;
     if (dir !== null) {
       parts.push(
