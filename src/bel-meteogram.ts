@@ -41,6 +41,10 @@ import type { ForecastUrl, HourPoint, StationMetadata } from "./types";
 const FONT_LINK_ID = "bel-meteogram-nunito";
 /** Hours fetched in full mode so the table can show a week */
 const FULL_MODE_HOURS = 168;
+/** How far the chart column's height must move during a resize drag before the
+ *  graph is rebuilt. Small enough to read as continuous, large enough that a
+ *  long chart's rebuild cost lands a few times per drag rather than per pixel. */
+const REFIT_QUANTUM = 12;
 /** Map-panel 2a persisted state key (development.md §7) */
 const MAP_PANEL_STATE_KEY = "mimirMapPanelState";
 const PANEL_W = 440;
@@ -244,6 +248,10 @@ export class BelMeteogram extends HTMLElement {
    *  -1 ("the user has not scrubbed"), and the keys must start from what is
    *  drawn rather than from the sentinel's fallback. */
   private renderedScrubIdx = 0;
+  /** Pending {@link scheduleGraphRefit} frame, and the chart height that frame's
+   *  predecessor drew at (-1 = no drag in progress). */
+  private refitRaf = 0;
+  private refitHeight = -1;
   private onKeyDown = (e: KeyboardEvent): void => {
     if (!this.isFull || !this.usesPanel) return;
     if (e.key === "Escape" && this.isExpanded()) {
@@ -389,6 +397,7 @@ export class BelMeteogram extends HTMLElement {
     document.removeEventListener("keydown", this.onKeyDown);
     window.removeEventListener("resize", this.onResize);
     if (this.resizeRaf) cancelAnimationFrame(this.resizeRaf);
+    this.cancelGraphRefit();
   }
 
   /**
@@ -705,6 +714,69 @@ export class BelMeteogram extends HTMLElement {
 
   // ---- Painting ----
 
+  /**
+   * Which layout regime the panel is in. One definition, because paintFull and
+   * the resize refit have to agree: landscape phones/tablets get the
+   * full-screen edge-to-edge sheet, the 900px breakpoint drives the floating
+   * desktop panel, and only that panel expands to two columns (a short
+   * landscape phone can't fit them).
+   */
+  private layoutFlags(): {
+    landscape: boolean;
+    wide: boolean;
+    expanded: boolean;
+  } {
+    const landscape = this.isLandscape;
+    return {
+      landscape,
+      wide: this.isWide || landscape,
+      expanded:
+        this.status === "ready" &&
+        this.isWide &&
+        !landscape &&
+        this.isExpanded(),
+    };
+  }
+
+  /**
+   * Re-render the graph column mid-drag, so a resize shows the chart you are
+   * choosing instead of snapping to it when you let go.
+   *
+   * Two economies keep the drag smooth: one rebuild per frame at most, and only
+   * once the column's height has moved by {@link REFIT_QUANTUM}. A long chart is
+   * ~8ms of HTML parse on its own, so rebuilding it every pixel would drop
+   * frames — the panel box tracks the pointer continuously, the chart follows in
+   * small steps, and the settle paint on release lands on the exact height.
+   */
+  private scheduleGraphRefit(): void {
+    if (this.refitRaf) return;
+    this.refitRaf = requestAnimationFrame(() => {
+      this.refitRaf = 0;
+      const box = this.body.querySelector<HTMLElement>(".yr-chart-fit");
+      const h = box?.clientHeight ?? 0;
+      if (!h || Math.abs(h - this.refitHeight) < REFIT_QUANTUM) return;
+      this.refitHeight = h;
+      // Hold the horizontal scroll: the chart is a scroller whose width does not
+      // change with height, so re-rendering must not send the reader back to
+      // hour zero (same reason paint() restores it).
+      const prevLeft =
+        this.body.querySelector<HTMLElement>(".yr-scroll")?.scrollLeft ?? 0;
+      const { landscape, wide, expanded } = this.layoutFlags();
+      this.paintGraphHost(landscape, expanded, wide, this.t);
+      if (prevLeft > 0) {
+        const next = this.body.querySelector<HTMLElement>(".yr-scroll");
+        if (next) next.scrollLeft = prevLeft;
+      }
+    });
+  }
+
+  /** Drop any pending refit frame — the caller is about to repaint anyway. */
+  private cancelGraphRefit(): void {
+    if (this.refitRaf) cancelAnimationFrame(this.refitRaf);
+    this.refitRaf = 0;
+    this.refitHeight = -1;
+  }
+
   private paint(): void {
     // Preserve the table column's scroll position across the re-render. Picking
     // a different day rebuilds innerHTML, which would otherwise snap the scroll
@@ -870,20 +942,11 @@ export class BelMeteogram extends HTMLElement {
     const selectedPlace: Place | null =
       places.find((p) => p.name === place) ?? null;
     const closable = this.hasAttribute("closable");
-    // Landscape phones/tablets get a full-screen edge-to-edge sheet that reuses
-    // the panel layout; the 900px desktop breakpoint drives the floating panel.
-    const landscape = this.isLandscape;
-    const wide = this.isWide || landscape;
+    const { landscape, wide, expanded } = this.layoutFlags();
 
     const summary = `${model?.name ?? "…"} · ${place} · ${lang.toUpperCase()}`;
     const sub = isNaN(lat) || isNaN(lon) ? "" : esc(coordLabel(lat, lon, t));
 
-    // Expanded ("bigger") panel: past the width breakpoint the desktop draggable
-    // panel uses a two-column layout (weather-now + table left, graph right).
-    // Landscape does NOT expand — a short phone can't fit two columns, so it uses
-    // a single full-screen view with a Table/Graph toggle instead (below).
-    const expanded =
-      this.status === "ready" && this.isWide && !landscape && this.isExpanded();
     let body = "";
     if (this.status === "loading") {
       body = `<div class="sk sk-now"></div><div class="sk-rows"><div class="sk sk-row"></div><div class="sk sk-row"></div><div class="sk sk-row"></div></div>`;
@@ -949,7 +1012,24 @@ export class BelMeteogram extends HTMLElement {
 
     this.body.innerHTML = `${page}${overlay}`;
     this.wireFull(places, models, selectedPlace);
+    this.paintGraphHost(landscape, expanded, wide, t);
+  }
 
+  /**
+   * Render the graph into `.graph-host` from current state.
+   *
+   * Split out of {@link paintFull} because a resize drag re-runs THIS and not
+   * the whole panel: the chart's geometry is resolved against the height it is
+   * given (see renderMapPanelGraph), so it has to be rebuilt when that height
+   * changes, and rebuilding the panel around it would throw away the day
+   * table's scroll position and the wiring mid-drag.
+   */
+  private paintGraphHost(
+    landscape: boolean,
+    expanded: boolean,
+    wide: boolean,
+    t: Labels,
+  ): void {
     const host = this.body.querySelector<HTMLElement>(".graph-host");
     if (host && this.status === "ready") {
       const gp = this.graphPoints();
@@ -1248,10 +1328,13 @@ export class BelMeteogram extends HTMLElement {
             rz.expanded = expandedNow;
             this.paint();
           } else {
-            // Same layout regime: cheap inline box resize (no repaint).
+            // Same layout regime: cheap inline box resize — the panel chrome and
+            // the table reflow via CSS, so only the chart needs redrawing, and
+            // that is throttled rather than run per pointermove.
             pg.style.left = `${left}px`;
             pg.style.width = `${w}px`;
             pg.style.height = `${h}px`;
+            this.scheduleGraphRefit();
           }
         };
         const rzUp = (): void => {
@@ -1260,7 +1343,8 @@ export class BelMeteogram extends HTMLElement {
           window.removeEventListener("pointermove", rzMove);
           window.removeEventListener("pointerup", rzUp);
           this.persistMapPanel();
-          this.paint(); // settle: re-render the graph at the final size
+          this.cancelGraphRefit();
+          this.paint(); // settle: exact height, and the panel chrome with it
         };
         grip.addEventListener("pointerdown", (e) => {
           e.preventDefault();
