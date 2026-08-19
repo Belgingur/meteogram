@@ -31,6 +31,7 @@ import {
   yrLaneChipY,
   yrSpecFor,
   yrSymbolRowY,
+  type YrBands,
   type YrSpec,
 } from "./layout";
 import { symbolUrl } from "./symbols";
@@ -97,7 +98,12 @@ function yrBandsFor(
   spec: YrSpec,
   height: number,
   chrome: { dayLabelSize: number; precipCap: number },
-) {
+): YrBands & {
+  precipBase: number;
+  dayLabelY: number;
+  hourLabelY: number;
+  laneChipY: [number, number, number];
+} {
   const bands = resolveYrBands(spec, height);
   return {
     ...bands,
@@ -106,6 +112,29 @@ function yrBandsFor(
     laneChipY: yrLaneChipY(bands, chrome.precipCap),
   };
 }
+
+/**
+ * The same layout re-resolved for a different chart height.
+ *
+ * Preferred over fit-scaling wherever the height is known before painting: the
+ * bands put the fixed chrome (day header, arrow strip) back at its designed
+ * pixel size and give the difference to the lanes, where scaling would shrink
+ * the type along with the data. Only the height-dependent fields change; colW,
+ * fonts, glyph sizes and strides come from `base` untouched.
+ */
+export function yrLayoutAtHeight(base: YrLayout, height: number): YrLayout {
+  if (height === base.height) return base;
+  return {
+    ...base,
+    ...yrBandsFor(yrSpecFor(base.symbolSize), height, {
+      dayLabelSize: base.dayLabelSize,
+      precipCap: base.precipCap,
+    }),
+  };
+}
+
+/** Shortest chart worth resolving bands for; below this the lanes are noise. */
+const MIN_EXPANDED_CHART_H = 240;
 
 const YR_COMPACT: YrLayout = {
   colW: 26,
@@ -143,7 +172,7 @@ const YR_COMPACT: YrLayout = {
   windStroke: 2.1,
 };
 
-const YR_FULLSCREEN: YrLayout = {
+export const YR_FULLSCREEN: YrLayout = {
   colW: 42,
   axisW: 52,
   rightAxisW: 28,
@@ -880,8 +909,11 @@ export function renderMapPanelGraph(
   const fs = opts.expanded ?? false;
   const base = fs ? YR_FULLSCREEN : YR_COMPACT;
 
-  const paint = (displayScale: number): YrLayout => {
-    const resolved = resolveYrLayout(base, points, displayScale);
+  const paint = (
+    displayScale: number,
+    layoutBase: YrLayout = base,
+  ): YrLayout => {
+    const resolved = resolveYrLayout(layoutBase, points, displayScale);
     host.innerHTML = `
     <div class="graph-bare graph-yr">
       ${readoutHtml(points, Math.max(0, Math.min(points.length - 1, opts.scrubIdx)), opts.t, true, fs, opts.fit ?? false)}
@@ -905,6 +937,20 @@ export function renderMapPanelGraph(
     if (fit) {
       const scaled = resolveYrLayout(base, points, fit.scale);
       if (!sameTicks(scaled, L)) L = paint(fit.scale);
+    }
+  } else if (fs) {
+    // Expanded panel: draw the chart at the height the column actually gives
+    // it, rather than at YR_FULLSCREEN's 560px and letting the column scroll.
+    // A panel shorter than 560px used to hide the day header above the fold and
+    // the wind arrows below it — the rows that say WHEN a reader is looking at
+    // and WHICH WAY it blows — so the fix is geometry, not a scrollbar. Taller
+    // panels gain lane height for the same reason. Measured after the first paint
+    // because the box only has a height once it is in the document; a resize
+    // repaints (see the panel's resize grip), so this re-measures then.
+    const box = host.querySelector<HTMLElement>(".yr-chart-fit");
+    const avail = box?.clientHeight ?? 0;
+    if (avail >= MIN_EXPANDED_CHART_H && Math.abs(avail - L.height) > 2) {
+      L = paint(1, yrLayoutAtHeight(base, avail));
     }
   }
 
