@@ -1,9 +1,9 @@
 /**
  * Chart geometry, expressed as bands rather than hand-tuned pixel tables.
  *
- * The yr-style chart is a vertical stack: chrome above the plot (day header +
- * hour labels, then the weather-symbol row), the temperature lane, a gap, the
- * wind lane, and an optional strip below the plot for the wind arrows. Every
+ * The chart is a vertical stack: chrome above the plot (day header + hour
+ * labels, then the weather-symbol row), the temperature lane, a gap, the wind
+ * lane, and an optional strip below the plot for the wind arrows. Every
  * y-coordinate the renderer needs is a boundary between two of them.
  *
  * Those coordinates used to be typed out per size — one table for the 262px
@@ -28,7 +28,7 @@
  */
 
 /** A chart's band structure: fixed chrome plus weighted lanes. */
-export interface YrSpec {
+export interface ChartSpec {
   /**
    * Chrome above the plot — the day header and the hour-label row. Fixed: it
    * is text, and text does not want to grow with the chart.
@@ -60,7 +60,7 @@ export interface YrSpec {
 }
 
 /** Resolved y-coordinates for one chart height. */
-export interface YrBands {
+export interface ChartBands {
   height: number;
   /** Top of the weather-symbol row, and the height it resolved to. */
   symbolTop: number;
@@ -98,7 +98,7 @@ const MIN_LANE_STACK = 60;
  * down together rather than the lanes being crushed: a 120px chart is still a
  * readable chart, just a cramped one.
  */
-export function resolveYrBands(spec: YrSpec, height: number): YrBands {
+export function resolveChartBands(spec: ChartSpec, height: number): ChartBands {
   const { temp, gap, wind } = spec;
   const flexTotal = temp + gap + wind;
 
@@ -157,7 +157,7 @@ export function resolveYrBands(spec: YrSpec, height: number): YrBands {
 }
 
 /** Whether a resolved chart has room for a dedicated wind-arrow strip. */
-export function hasArrowStrip(bands: YrBands): boolean {
+export function hasArrowStrip(bands: ChartBands): boolean {
   return bands.height - bands.plotBottom >= ARROW_STRIP_MIN;
 }
 
@@ -178,9 +178,9 @@ export const MIN_FIT_HEIGHT = 60;
  * stayed at full height, pointing the mm ticks at the wrong gridlines.
  */
 export const CHART_FIT_SELECTORS = [
-  ".yr-axis",
-  ".yr-plot",
-  ".yr-axis-right",
+  ".chart-axis",
+  ".chart-plot",
+  ".chart-axis-right",
 ] as const;
 
 /** The uniform scale from a chart's base coordinates to screen pixels. */
@@ -229,8 +229,8 @@ const HOUR_LABEL_GAP = 8;
  * actually resolved to, which is what stops a label from landing inside the
  * plot when a chart is resized.
  */
-export function yrHeaderBaselines(
-  bands: YrBands,
+export function chartHeaderBaselines(
+  bands: ChartBands,
   dayLabelSize: number,
 ): { dayLabelY: number; hourLabelY: number } {
   return {
@@ -253,8 +253,8 @@ export function yrHeaderBaselines(
  * precipitation chip sits above the tallest bar the lane can draw — bars rise
  * from the temperature baseline, so `precipCap` is what it has to clear.
  */
-export function yrLaneChipY(
-  bands: YrBands,
+export function chartLaneChipY(
+  bands: ChartBands,
   precipCap: number,
 ): [number, number, number] {
   const inset = 8;
@@ -266,7 +266,7 @@ export function yrLaneChipY(
 }
 
 /**
- * The one yr chart spec, shared by every size.
+ * The one chart spec, shared by every size.
  *
  * Lane weights come from the docked panel, which had the more generous
  * temperature lane of the two originals (48% of its chart against the
@@ -282,7 +282,7 @@ export function yrLaneChipY(
  * from its oversized header and hands it to the lanes, and moves the panel's
  * arrows out of the wind lane where they overlapped the line.
  */
-export const YR_SPEC: YrSpec = {
+export const CHART_SPEC: ChartSpec = {
   headerPx: 44,
   symbolsPx: 26,
   arrowsPx: 26,
@@ -295,17 +295,17 @@ export const YR_SPEC: YrSpec = {
 const SYMBOL_ROW_PAD = 6;
 
 /**
- * {@link YR_SPEC} with its symbol row sized for a given glyph, since glyph size
+ * {@link CHART_SPEC} with its symbol row sized for a given glyph, since glyph size
  * is per-layout (20px docked, 26px expanded) while everything else is shared.
  */
-export function yrSpecFor(symbolSize: number): YrSpec {
-  return { ...YR_SPEC, symbolsPx: symbolSize + SYMBOL_ROW_PAD };
+export function chartSpecFor(symbolSize: number): ChartSpec {
+  return { ...CHART_SPEC, symbolsPx: symbolSize + SYMBOL_ROW_PAD };
 }
 
 /**
  * Y of a symbol glyph's top edge: centred in the row, or flush with its top when
  * a very short chart has shrunk the row below the glyph.
  */
-export function yrSymbolRowY(bands: YrBands, symbolSize: number): number {
+export function chartSymbolRowY(bands: ChartBands, symbolSize: number): number {
   return bands.symbolTop + Math.max(0, Math.round((bands.symbolsPx - symbolSize) / 2));
 }

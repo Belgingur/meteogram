@@ -9,7 +9,7 @@ import type { HourPoint } from "./types";
  * The value axes are NOT part of the scrolling plot: `buildMeteogram` returns
  * them as two separate SVG strips (temperature + wind on the left, precipitation
  * on the right) that the caller mounts as pinned flex siblings of the scroller,
- * matching the desktop `.yr-chart` structure in map-panel-graph.ts. Both strips
+ * matching the desktop `.chart` structure in map-panel-graph.ts. Both strips
  * are positioned with the very same scale closures as the plot's gridlines, so
  * labels and gridlines cannot drift apart at any scroll offset.
  *
@@ -213,7 +213,7 @@ function linePath(
 
 /* ── Axis ticks: the single source of tick values, units and formatting ─────
    Shared by BOTH chart renderers (this module's mobile meteogram and the
-   desktop yr chart in map-panel-graph.ts) so a scale never reads differently
+   desktop panel chart in map-panel-graph.ts) so a scale never reads differently
    between the two. Each renderer still owns its own y-domains and geometry —
    only the tick values and their text come from here. */
 

@@ -22,27 +22,27 @@ import {
 } from "./render";
 import {
   CHART_FIT_SELECTORS,
+  chartHeaderBaselines,
+  chartLaneChipY,
+  chartSpecFor,
+  chartSymbolRowY,
   fittedLaneY,
   fittedWidth,
   hasArrowStrip,
+  resolveChartBands,
   resolveChartFit,
-  resolveYrBands,
-  yrHeaderBaselines,
-  yrLaneChipY,
-  yrSpecFor,
-  yrSymbolRowY,
-  type YrBands,
-  type YrSpec,
+  type ChartBands,
+  type ChartSpec,
 } from "./layout";
 import { symbolUrl } from "./symbols";
 import type { HourPoint } from "./types";
 
 /** Map-panel 2a temperature colour (§6) */
-export function tempColorYr(t: number): string {
+export function tempColorPanel(t: number): string {
   return t > 0 ? "#C81D25" : t < 0 ? "#2E6FB2" : "#6B7A86";
 }
 
-interface YrLayout {
+interface ChartLayout {
   colW: number;
   height: number;
   axisW: number;
@@ -57,14 +57,14 @@ interface YrLayout {
   plotBottom: number;
   tempTop: number;
   tempBase: number;
-  /** Filled by resolveYrLayout from the displayed data */
+  /** Filled by resolveChartLayout from the displayed data */
   tempLo: number;
   tempHi: number;
   tempTicks: number[];
   windTop: number;
   windBase: number;
   windMax: number;
-  /** Filled by resolveYrLayout from the lane height (shared tick rule) */
+  /** Filled by resolveChartLayout from the lane height (shared tick rule) */
   windTicks: number[];
   precipBase: number;
   precipPerMm: number;
@@ -94,22 +94,22 @@ interface YrLayout {
  * Band boundaries for one chart height, plus the precipitation baseline —
  * which is the temperature lane's baseline, since the bars hang off it.
  */
-function yrBandsFor(
-  spec: YrSpec,
+function chartBandsFor(
+  spec: ChartSpec,
   height: number,
   chrome: { dayLabelSize: number; precipCap: number },
-): YrBands & {
+): ChartBands & {
   precipBase: number;
   dayLabelY: number;
   hourLabelY: number;
   laneChipY: [number, number, number];
 } {
-  const bands = resolveYrBands(spec, height);
+  const bands = resolveChartBands(spec, height);
   return {
     ...bands,
     precipBase: bands.tempBase,
-    ...yrHeaderBaselines(bands, chrome.dayLabelSize),
-    laneChipY: yrLaneChipY(bands, chrome.precipCap),
+    ...chartHeaderBaselines(bands, chrome.dayLabelSize),
+    laneChipY: chartLaneChipY(bands, chrome.precipCap),
   };
 }
 
@@ -122,11 +122,14 @@ function yrBandsFor(
  * the type along with the data. Only the height-dependent fields change; colW,
  * fonts, glyph sizes and strides come from `base` untouched.
  */
-export function yrLayoutAtHeight(base: YrLayout, height: number): YrLayout {
+export function chartLayoutAtHeight(
+  base: ChartLayout,
+  height: number,
+): ChartLayout {
   if (height === base.height) return base;
   return {
     ...base,
-    ...yrBandsFor(yrSpecFor(base.symbolSize), height, {
+    ...chartBandsFor(chartSpecFor(base.symbolSize), height, {
       dayLabelSize: base.dayLabelSize,
       precipCap: base.precipCap,
     }),
@@ -136,12 +139,12 @@ export function yrLayoutAtHeight(base: YrLayout, height: number): YrLayout {
 /** Shortest chart worth resolving bands for; below this the lanes are noise. */
 const MIN_EXPANDED_CHART_H = 240;
 
-const YR_COMPACT: YrLayout = {
+const CHART_COMPACT: ChartLayout = {
   colW: 26,
   axisW: 46,
   rightAxisW: 24,
   axisFont: 9.5,
-  ...yrBandsFor(yrSpecFor(20), 262, { dayLabelSize: 13, precipCap: 44 }),
+  ...chartBandsFor(chartSpecFor(20), 262, { dayLabelSize: 13, precipCap: 44 }),
   tempLo: 0,
   tempHi: 10,
   tempTicks: [0, 5, 10],
@@ -163,8 +166,8 @@ const YR_COMPACT: YrLayout = {
   windLabelEvery: 0,
   // Arrows are narrow enough for one per column at colW 26; the 20px weather
   // glyphs are not — hourly data draws them 6px apart and they read as a smear,
-  // so the docked panel keeps every second one. The expanded and fullscreen
-  // layouts have the column width to show them all.
+  // so the docked panel keeps every second one. The expanded layout has the
+  // column width to show them all.
   symbolEvery: 2,
   arrowEvery: 1,
   gridEvery: 2,
@@ -172,12 +175,12 @@ const YR_COMPACT: YrLayout = {
   windStroke: 2.1,
 };
 
-export const YR_FULLSCREEN: YrLayout = {
+export const CHART_EXPANDED: ChartLayout = {
   colW: 42,
   axisW: 52,
   rightAxisW: 28,
   axisFont: 11,
-  ...yrBandsFor(yrSpecFor(26), 560, { dayLabelSize: 16, precipCap: 84 }),
+  ...chartBandsFor(chartSpecFor(26), 560, { dayLabelSize: 16, precipCap: 84 }),
   tempLo: 0,
   tempHi: 10,
   tempTicks: [0, 5, 10],
@@ -206,7 +209,7 @@ export const YR_FULLSCREEN: YrLayout = {
   windStroke: 2.4,
 };
 
-export interface YrGeometry {
+export interface ChartGeometry {
   width: number;
   count: number;
   cx: (i: number) => number;
@@ -269,7 +272,7 @@ function dayHeaderLabel(p: HourPoint, t: Labels): string {
 
 function nightBands(
   points: HourPoint[],
-  L: YrLayout,
+  L: ChartLayout,
 ): { x: number; w: number }[] {
   const bands: { x: number; w: number }[] = [];
   let start: number | null = null;
@@ -289,14 +292,14 @@ function nightBands(
 }
 
 /**
- * Nice-step temp domain for the yr axis, thinned to at most `maxLabels`.
+ * Nice-step temp domain for the panel's temperature axis, thinned to at most `maxLabels`.
  *
  * Two values are never thinned away: the top of the scale, which is the number
  * a reader looks for first (the day's peak sits in the top step nearly every
  * time), and 0°C, which is where water freezes and the one gridline on the
  * chart that means something in itself.
  */
-function yrTempScale(
+function chartTempScale(
   points: HourPoint[],
   maxLabels: number,
 ): { lo: number; hi: number; ticks: number[] } {
@@ -330,15 +333,15 @@ function yrTempScale(
  * gave a landscape phone scaled to 0.6 the same number of labels as a desktop
  * panel at 1.0, crammed into 60% of the room.
  */
-function resolveYrLayout(
-  base: YrLayout,
+function resolveChartLayout(
+  base: ChartLayout,
   points: HourPoint[],
   displayScale = 1,
-): YrLayout {
+): ChartLayout {
   const scale = displayScale > 0 ? displayScale : 1;
   const tempLanePx = (base.tempBase - base.tempTop) * scale;
   const windLanePx = (base.windBase - base.windTop) * scale;
-  const { lo, hi, ticks } = yrTempScale(points, maxLabelsFor(tempLanePx));
+  const { lo, hi, ticks } = chartTempScale(points, maxLabelsFor(tempLanePx));
   return {
     ...base,
     tempLo: lo,
@@ -351,25 +354,25 @@ function resolveYrLayout(
 }
 
 /** Whether two resolved layouts would draw the same ladders in both gutters. */
-function sameTicks(a: YrLayout, b: YrLayout): boolean {
+function sameTicks(a: ChartLayout, b: ChartLayout): boolean {
   const same = (x: number[], y: number[]): boolean =>
     x.length === y.length && x.every((v, i) => v === y[i]);
   return same(a.tempTicks, b.tempTicks) && same(a.windTicks, b.windTicks);
 }
 
-function tempSpan(L: YrLayout): number {
+function tempSpan(L: ChartLayout): number {
   const span = L.tempHi - L.tempLo;
   return span > 0 ? span : 1;
 }
 
 /** Y for wind-direction arrows — dedicated strip below plot or inside wind lane. */
-function windArrowY(L: YrLayout): number {
+function windArrowY(L: ChartLayout): number {
   const tail = L.height - L.plotBottom;
   if (hasArrowStrip(L)) return L.plotBottom + tail / 2;
   return L.windBase - 14;
 }
 
-function buildAxisSvg(L: YrLayout): string {
+function buildAxisSvg(L: ChartLayout): string {
   const ty = (v: number): number =>
     L.tempBase - ((v - L.tempLo) / tempSpan(L)) * (L.tempBase - L.tempTop);
   const wy = (v: number): number =>
@@ -394,7 +397,7 @@ function buildAxisSvg(L: YrLayout): string {
   // No rotated "Hiti (°C)" / "Vindur (m/s)" axis titles: they only rendered in
   // the expanded view, making it the odd one out. The lane chips + legend name
   // the series everywhere, so the numeric scale alone is enough here too.
-  return `<svg class="yr-axis" width="${L.axisW}" height="${L.height}" viewBox="0 0 ${L.axisW} ${L.height}" style="display:block;flex:none">${parts.join("")}</svg>`;
+  return `<svg class="chart-axis" width="${L.axisW}" height="${L.height}" viewBox="0 0 ${L.axisW} ${L.height}" style="display:block;flex:none">${parts.join("")}</svg>`;
 }
 
 /**
@@ -403,7 +406,7 @@ function buildAxisSvg(L: YrLayout): string {
  * (they'd collide with the temp labels) — they go here instead, in the precip
  * blue, and stay fixed while the chart scrolls horizontally.
  */
-function buildRightAxisSvg(L: YrLayout): string {
+function buildRightAxisSvg(L: ChartLayout): string {
   const rightW = L.rightAxisW;
   const ph = (mm: number): number => Math.min(L.precipCap, mm * L.precipPerMm);
   const size = L.axisFont;
@@ -423,7 +426,7 @@ function buildRightAxisSvg(L: YrLayout): string {
       ),
     );
   }
-  return `<svg class="yr-axis-right" width="${rightW}" height="${L.height}" viewBox="0 0 ${rightW} ${L.height}" style="display:block;flex:none">${parts.join("")}</svg>`;
+  return `<svg class="chart-axis-right" width="${rightW}" height="${L.height}" viewBox="0 0 ${rightW} ${L.height}" style="display:block;flex:none">${parts.join("")}</svg>`;
 }
 
 function buildPlotSvg(
@@ -432,8 +435,8 @@ function buildPlotSvg(
   scrubIdx: number,
   nowIdx: number,
   anaIdx: number,
-  L: YrLayout,
-): { svg: string; geo: YrGeometry } {
+  L: ChartLayout,
+): { svg: string; geo: ChartGeometry } {
   const n = points.length;
   const width = n * L.colW + L.plotPad;
   const cx = (i: number): number => i * L.colW + L.colW / 2;
@@ -533,7 +536,7 @@ function buildPlotSvg(
   // column. They used to hang ~30px off the temperature curve, which put them on
   // a different line in every column and let them sit on the line and the value
   // labels; the row is what the meteogram card does, so the two now match.
-  const symbolY = yrSymbolRowY(L, L.symbolSize);
+  const symbolY = chartSymbolRowY(L, L.symbolSize);
   for (let i = 0; i < n; i += L.symbolEvery) {
     const url = symbolUrl(points[i].symbol);
     if (url) {
@@ -591,7 +594,7 @@ function buildPlotSvg(
           cx(i),
           y,
           `${Math.round(v)}°`,
-          tempColorYr(Math.round(v)),
+          tempColorPanel(Math.round(v)),
           L.tempLabelFont,
           800,
           "middle",
@@ -620,12 +623,12 @@ function buildPlotSvg(
   const nowX = cx(Math.max(0, Math.min(n - 1, nowIdx)));
   const nowTemp = points[nowIdx]?.tempC ?? null;
   parts.push(
-    `<line class="yr-ana" x1="${anaX}" x2="${anaX}" y1="${L.plotTop}" y2="${L.plotBottom}" stroke="#F0A32F" stroke-width="2"/>`,
-    `<line class="yr-now" x1="${nowX}" x2="${nowX}" y1="${L.plotTop}" y2="${L.plotBottom}" stroke="#6B7A86" stroke-width="1.2" stroke-dasharray="4 3"/>`,
+    `<line class="chart-ana" x1="${anaX}" x2="${anaX}" y1="${L.plotTop}" y2="${L.plotBottom}" stroke="#F0A32F" stroke-width="2"/>`,
+    `<line class="chart-now" x1="${nowX}" x2="${nowX}" y1="${L.plotTop}" y2="${L.plotBottom}" stroke="#6B7A86" stroke-width="1.2" stroke-dasharray="4 3"/>`,
   );
   if (nowTemp !== null) {
     parts.push(
-      `<circle class="yr-now-dot" cx="${nowX}" cy="${ty(nowTemp)}" r="4.5" fill="#C81D25" stroke="#fff" stroke-width="1.5"/>`,
+      `<circle class="chart-now-dot" cx="${nowX}" cy="${ty(nowTemp)}" r="4.5" fill="#C81D25" stroke="#fff" stroke-width="1.5"/>`,
     );
   }
 
@@ -639,8 +642,8 @@ function buildPlotSvg(
     `<circle class="scrub-dot-wind" cx="${sx}" cy="${sWind === null ? 0 : wy(sWind)}" r="4" fill="#3E8E63" stroke="#fff" stroke-width="1.5"${sWind === null ? ' visibility="hidden"' : ""}/>`,
   );
 
-  const svg = `<svg class="yr-plot" width="${width}" height="${L.height}" viewBox="0 0 ${width} ${L.height}" style="display:block;touch-action:none;cursor:crosshair" role="img">${parts.join("")}</svg>`;
-  const geo: YrGeometry = {
+  const svg = `<svg class="chart-plot" width="${width}" height="${L.height}" viewBox="0 0 ${width} ${L.height}" style="display:block;touch-action:none;cursor:crosshair" role="img">${parts.join("")}</svg>`;
+  const geo: ChartGeometry = {
     width,
     count: n,
     cx,
@@ -654,8 +657,8 @@ function buildPlotSvg(
 
 function laneChip(translateY: number, swatch: string, label: string): string {
   return (
-    `<div class="lane-chip-wrap yr-lane" style="transform:translateY(${translateY}px)">` +
-    `<div class="lane-chip yr-chip"><span class="chip-swatch-${swatch} yr-swatch-${swatch}"></span>${esc(label)}</div></div>`
+    `<div class="lane-chip-wrap chart-lane" style="transform:translateY(${translateY}px)">` +
+    `<div class="lane-chip chart-chip"><span class="chip-swatch-${swatch} chart-swatch-${swatch}"></span>${esc(label)}</div></div>`
   );
 }
 
@@ -685,7 +688,7 @@ export interface MapPanelGraphOptions {
 
 function wireScrub(
   el: Element,
-  geo: YrGeometry,
+  geo: ChartGeometry,
   getIdx: () => number,
   setIdx: (i: number) => void,
   onScrub: (i: number) => void,
@@ -718,7 +721,7 @@ function wireScrub(
 
 function scrollToScrub(
   scrollEl: HTMLElement,
-  geo: YrGeometry,
+  geo: ChartGeometry,
   idx: number,
   colW: number,
   displayScale: () => number = () => 1,
@@ -729,7 +732,7 @@ function scrollToScrub(
 }
 
 /**
- * Scale a rendered yr chart so its `baseHeight` viewBox fills `availH` px of
+ * Scale a rendered chart so its `baseHeight` viewBox fills `availH` px of
  * screen, keeping the scrub geometry intact: the ratio is recorded on the root
  * and read back by the pointer/scroll maths via {@link chartDisplayScale}.
  *
@@ -745,7 +748,7 @@ function fitChart(
   availH: number,
 ): number {
   const fit = resolveChartFit(baseHeight, availH);
-  if (!fit || !root.querySelector(".yr-plot")) {
+  if (!fit || !root.querySelector(".chart-plot")) {
     return chartDisplayScale(root)();
   }
 
@@ -760,7 +763,7 @@ function fitChart(
   }
 
   // Sticky lane chips are HTML, positioned against the plot's y-coordinates.
-  root.querySelectorAll<HTMLElement>(".yr-lane").forEach((el) => {
+  root.querySelectorAll<HTMLElement>(".chart-lane").forEach((el) => {
     const match = /translateY\(([\d.]+)px\)/.exec(el.style.transform);
     if (match && !el.dataset.laneY) el.dataset.laneY = match[1];
     const base = Number(el.dataset.laneY ?? match?.[1] ?? 0);
@@ -789,7 +792,7 @@ export function chartBlock(
   scrubIdx: number,
   nowIdx: number,
   anaIdx: number,
-  L: YrLayout,
+  L: ChartLayout,
   fullscreen: boolean,
   withRail = false,
 ): string {
@@ -813,9 +816,9 @@ export function chartBlock(
        <div class="scrub-cursor"></div>`
     : "";
   return `
-    <div class="yr-chart${fullscreen ? " yr-chart-fs" : ""}">
+    <div class="chart${fullscreen ? " chart-fs" : ""}">
       ${axis}
-      <div class="yr-scroll">
+      <div class="chart-scroll">
         ${rail}
         ${chips}
         ${svg}
@@ -836,10 +839,10 @@ function legendHtml(t: Labels, metaLine?: string, hasGust = true): string {
     ? `<span><span class="swatch-gust"></span>${esc(t.legGust)}</span>`
     : "";
   return `
-    <div class="legend yr-legend">
-      <span><span class="swatch-temp yr-swatch-temp"></span>${esc(t.legTemp)}</span>
+    <div class="legend chart-legend">
+      <span><span class="swatch-temp chart-swatch-temp"></span>${esc(t.legTemp)}</span>
       <span><span class="swatch-precip"></span>${esc(t.legPrecip)}</span>
-      <span><span class="swatch-pmax yr-swatch-pmax"></span>${esc(t.legPmax)}</span>
+      <span><span class="swatch-pmax chart-swatch-pmax"></span>${esc(t.legPmax)}</span>
       <span><span class="swatch-wind"></span>${esc(t.legWind)}</span>
       ${gust}
       ${meta}
@@ -856,13 +859,13 @@ function readoutHtml(
 ): string {
   const p = points[idx];
   const temp = p.tempC === null ? "–" : `${Math.round(p.tempC)}°`;
-  const tc = p.tempC === null ? "#6B7A86" : tempColorYr(Math.round(p.tempC));
+  const tc = p.tempC === null ? "#6B7A86" : tempColorPanel(Math.round(p.tempC));
   const url = symbolUrl(p.symbol);
   const icon = url
     ? `<img src="${esc(url)}" width="34" height="34" alt="">`
     : "";
   const fsBtn = showFsBtn
-    ? `<button class="yr-fs-btn" type="button" aria-label="${esc(expanded ? t.exitFullscreen : t.fullscreen)}">${expanded ? fsCollapseSvg : fsExpandSvg}</button>`
+    ? `<button class="chart-fs-btn" type="button" aria-label="${esc(expanded ? t.exitFullscreen : t.fullscreen)}">${expanded ? fsCollapseSvg : fsExpandSvg}</button>`
     : "";
   // Landscape (fit): the readout floats over the chart as a dismissible popup
   // instead of taking a chrome band, so it carries its own minimize + close
@@ -898,7 +901,7 @@ function readoutHtml(
     </div>`;
 }
 
-/** Render the map-panel 2a compact yr-style meteogram into `host`. */
+/** Render the map-panel 2a compact meteogram into `host`. */
 export function renderMapPanelGraph(
   host: HTMLElement,
   points: HourPoint[],
@@ -906,19 +909,19 @@ export function renderMapPanelGraph(
 ): { setScrubIdx: (i: number) => void } {
   // Expanded panel uses the taller fullscreen layout so the graph fills the
   // extra vertical room; the docked card uses the compact one.
-  const fs = opts.expanded ?? false;
-  const base = fs ? YR_FULLSCREEN : YR_COMPACT;
+  const expanded = opts.expanded ?? false;
+  const base = expanded ? CHART_EXPANDED : CHART_COMPACT;
 
   const paint = (
     displayScale: number,
-    layoutBase: YrLayout = base,
-  ): YrLayout => {
-    const resolved = resolveYrLayout(layoutBase, points, displayScale);
+    layoutBase: ChartLayout = base,
+  ): ChartLayout => {
+    const resolved = resolveChartLayout(layoutBase, points, displayScale);
     host.innerHTML = `
-    <div class="graph-bare graph-yr">
-      ${readoutHtml(points, Math.max(0, Math.min(points.length - 1, opts.scrubIdx)), opts.t, true, fs, opts.fit ?? false)}
-      <div class="yr-chart-fit">
-        ${chartBlock(points, opts.t, opts.scrubIdx, opts.nowIdx, opts.anaIdx, resolved, fs, opts.fit ?? false)}
+    <div class="graph-bare graph-panel">
+      ${readoutHtml(points, Math.max(0, Math.min(points.length - 1, opts.scrubIdx)), opts.t, true, expanded, opts.fit ?? false)}
+      <div class="chart-fit">
+        ${chartBlock(points, opts.t, opts.scrubIdx, opts.nowIdx, opts.anaIdx, resolved, expanded, opts.fit ?? false)}
       </div>
       ${legendHtml(opts.t, opts.metaLine, hasGustSeries(points))}
     </div>`;
@@ -932,37 +935,37 @@ export function renderMapPanelGraph(
   // desktop's worth of labels in 60% of the room.
   let L = paint(1);
   if (opts.fit) {
-    const box = host.querySelector<HTMLElement>(".yr-chart-fit");
+    const box = host.querySelector<HTMLElement>(".chart-fit");
     const fit = box ? resolveChartFit(L.height, box.clientHeight) : null;
     if (fit) {
-      const scaled = resolveYrLayout(base, points, fit.scale);
+      const scaled = resolveChartLayout(base, points, fit.scale);
       if (!sameTicks(scaled, L)) L = paint(fit.scale);
     }
-  } else if (fs) {
+  } else if (expanded) {
     // Expanded panel: draw the chart at the height the column actually gives
-    // it, rather than at YR_FULLSCREEN's 560px and letting the column scroll.
+    // it, rather than at CHART_EXPANDED's 560px and letting the column scroll.
     // A panel shorter than 560px used to hide the day header above the fold and
     // the wind arrows below it — the rows that say WHEN a reader is looking at
     // and WHICH WAY it blows — so the fix is geometry, not a scrollbar. Taller
     // panels gain lane height for the same reason. Measured after the first paint
     // because the box only has a height once it is in the document; a resize
     // repaints (see the panel's resize grip), so this re-measures then.
-    const box = host.querySelector<HTMLElement>(".yr-chart-fit");
+    const box = host.querySelector<HTMLElement>(".chart-fit");
     const avail = box?.clientHeight ?? 0;
     if (avail >= MIN_EXPANDED_CHART_H && Math.abs(avail - L.height) > 2) {
-      L = paint(1, yrLayoutAtHeight(base, avail));
+      L = paint(1, chartLayoutAtHeight(base, avail));
     }
   }
 
   let idx = Math.max(0, Math.min(points.length - 1, opts.scrubIdx));
-  const plot = host.querySelector<SVGSVGElement>(".yr-plot")!;
-  const scroll = host.querySelector<HTMLElement>(".yr-scroll")!;
-  const fitEl = host.querySelector<HTMLElement>(".yr-chart-fit");
+  const plot = host.querySelector<SVGSVGElement>(".chart-plot")!;
+  const scroll = host.querySelector<HTMLElement>(".chart-scroll")!;
+  const fitEl = host.querySelector<HTMLElement>(".chart-fit");
   const scaleFn = opts.fit ? chartDisplayScale(host) : (): number => 1;
   // Landscape scrubber overlay (present only when opts.fit renders the rail).
   const rail = host.querySelector<HTMLElement>(".scrub-rail");
   const grab = host.querySelector<HTMLElement>(".scrub-grab");
-  const railCursor = host.querySelector<HTMLElement>(".yr-scroll > .scrub-cursor");
+  const railCursor = host.querySelector<HTMLElement>(".chart-scroll > .scrub-cursor");
   // Landscape floating scrub-readout popup (present only when opts.fit).
   const readoutPop = host.querySelector<HTMLElement>(".readout-pop");
   const applyFit = (): void => {
@@ -995,9 +998,9 @@ export function renderMapPanelGraph(
     const p = points[idx];
     const x = geo.cx(idx);
     // Scoped to the plot: the landscape scrubber adds an HTML .scrub-cursor
-    // sibling inside .yr-scroll that must not shadow this SVG line.
-    q<SVGLineElement>(".yr-plot .scrub-cursor").setAttribute("x1", `${x}`);
-    q<SVGLineElement>(".yr-plot .scrub-cursor").setAttribute("x2", `${x}`);
+    // sibling inside .chart-scroll that must not shadow this SVG line.
+    q<SVGLineElement>(".chart-plot .scrub-cursor").setAttribute("x1", `${x}`);
+    q<SVGLineElement>(".chart-plot .scrub-cursor").setAttribute("x2", `${x}`);
     const dotTemp = q<SVGCircleElement>(".scrub-dot-temp");
     dotTemp.setAttribute("cx", `${x}`);
     dotTemp.setAttribute("visibility", p.tempC === null ? "hidden" : "visible");
@@ -1011,7 +1014,7 @@ export function renderMapPanelGraph(
     const tempEl = q<HTMLElement>(".ro-temp");
     tempEl.textContent = p.tempC === null ? "–" : `${Math.round(p.tempC)}°`;
     tempEl.style.color =
-      p.tempC === null ? "#6B7A86" : tempColorYr(Math.round(p.tempC));
+      p.tempC === null ? "#6B7A86" : tempColorPanel(Math.round(p.tempC));
     q<HTMLElement>(".ro-precip").textContent = `${p.precipMm.toFixed(1)} mm`;
     q<HTMLElement>(".ro-wind-text").textContent = windText(p);
     q<HTMLElement>(".ro-arrow").innerHTML = arrowSvg(p.dirDeg, 13, "#14202B");
@@ -1045,7 +1048,7 @@ export function renderMapPanelGraph(
 
     // Draggable: reposition the popup anywhere over the chart. Grabbing anywhere
     // but the buttons starts a drag; the position is clamped to the graph area
-    // (its offsetParent, .graph-yr). Position is per-render — a rotate/day/lang
+    // (its offsetParent, .graph-panel). Position is per-render — a rotate/day/lang
     // change re-lays it out at the default top-right, which is fine.
     let drag: { sx: number; sy: number; ox: number; oy: number } | null = null;
     readoutPop.addEventListener("pointerdown", (e) => {
@@ -1108,7 +1111,7 @@ export function renderMapPanelGraph(
   } else {
     // buildPlotSvg hard-codes `touch-action:none` on the <svg> (it was the
     // desktop scrub surface). In landscape the plot must pan horizontally
-    // instead, so a touch drag reaches the .yr-scroll container — override it to
+    // instead, so a touch drag reaches the .chart-scroll container — override it to
     // pan-x. Without this the graph is stuck even though it overflows.
     plot.style.touchAction = "pan-x";
   }
@@ -1158,7 +1161,7 @@ export function renderMapPanelGraph(
   applyFit();
   scrollToScrub(scroll, geo, idx, L.colW, scaleFn);
   update();
-  host.querySelector(".yr-fs-btn")?.addEventListener("click", () => opts.onFullscreen?.());
+  host.querySelector(".chart-fs-btn")?.addEventListener("click", () => opts.onFullscreen?.());
 
   // Landscape: re-fit the chart to the height the layout gives it, and on every
   // rotation / viewport change (the observed element is the chart's flex box).

@@ -66,7 +66,7 @@ input:focus-visible,
 
 /* Chart row: pinned left axis · scrolling plot · pinned right axis. Only the
    middle column scrolls, so both value scales stay put at every scroll offset
-   (same structure as the desktop .yr-chart). */
+   (same structure as the desktop .chart). */
 .mg-chart {
   display: flex;
   align-items: flex-start;
@@ -214,7 +214,7 @@ input:focus-visible,
 /* The layout is switched in JS at a 900px viewport breakpoint: the       */
 /* component adds .wide or .narrow to .page.                              */
 /*   .narrow — the mobile sheet (Mimir responsive v2).                    */
-/*   .wide   — map-panel 2a: draggable yr-style panel over the map         */
+/*   .wide   — map-panel 2a: draggable panel over the map                 */
 /* ===================================================================== */
 .page {
   position: relative;
@@ -279,14 +279,14 @@ input:focus-visible,
 }
 .is-fullscreen .panel-drag { cursor: default; }
 .is-fullscreen .panel-resize { display: none; }
-.is-fullscreen .yr-fs-btn { display: none; }
+.is-fullscreen .chart-fs-btn { display: none; }
 /* The legend + meta footer would each eat a row of the short viewport; the
    in-chart lane chips (Hiti/Úrkoma/Vindur) and scrub readout already cover them. */
 /* Landscape shows a slim single-row key below the graph (temp / precip / wind /
    gust — the dashed gust line has no in-chart chip otherwise), with the
    analysis + last-update line folded in on the right (.legend-meta). The
    standalone meta footer stays hidden — this row carries it. */
-.is-fullscreen .yr-legend {
+.is-fullscreen .chart-legend {
   display: flex;
   flex: none;
   align-items: center;
@@ -299,7 +299,7 @@ input:focus-visible,
    on BOTH desktop and landscape, replacing the standalone meta footer in graph
    view (hidden below). On the narrow desktop panel it simply wraps to its own
    line at the bottom of the legend. */
-.yr-legend .legend-meta {
+.chart-legend .legend-meta {
   margin-left: auto;
   color: var(--haze-2);
   font-weight: 700;
@@ -342,12 +342,12 @@ input:focus-visible,
 /* Graph view fills the sheet; the chart is fit-scaled in JS so it must not add
    its own vertical scrollbar. */
 .is-fullscreen .graph-view-2a { flex: 1; min-height: 0; }
-.is-fullscreen .yr-chart-fit { overflow: hidden; }
+.is-fullscreen .chart-fit { overflow: hidden; }
 /* Landscape: the scrub readout is a floating popup over the chart (top-right),
    NOT a chrome band — so the graph fills the whole height and the values are
    still one scrub away. It can be minimized (time + temp only) or closed
    (moving the scrubber reopens it). */
-.is-fullscreen .graph-yr { position: relative; }
+.is-fullscreen .graph-panel { position: relative; }
 .is-fullscreen .readout-pop {
   position: absolute;
   top: 6px;
@@ -402,7 +402,7 @@ input:focus-visible,
 /* Very short landscape (Safari with its toolbar showing leaves ~260–320px) —
    the graph is the priority, so slim the remaining bands (tabs + legend). */
 @media (orientation: landscape) and (max-height: 380px) {
-  .is-fullscreen .yr-legend { padding: 1px 12px; }
+  .is-fullscreen .chart-legend { padding: 1px 12px; }
   .page.is-fullscreen .tab { padding: 2px 0; }
 }
 /* Table view: one scrolling column (no nested scroll on the table itself). */
@@ -685,10 +685,10 @@ input:focus-visible,
 }
 .exp-right .graph-view-2a,
 .exp-right .graph-host,
-.exp-right .graph-yr { flex: 1; min-height: 0; }
+.exp-right .graph-panel { flex: 1; min-height: 0; }
 /* The taller (fullscreen) chart fills the expanded column; scroll if the panel
    is shorter than the chart rather than clipping it. */
-.exp-right .yr-chart-fit { overflow-y: auto; }
+.exp-right .chart-fit { overflow-y: auto; }
 
 /* Table view — scrolling 24 h table with sticky header */
 .panel-table { flex: 1; min-height: 70px; overflow-y: auto; padding: 0 16px 12px; }
@@ -723,7 +723,7 @@ input:focus-visible,
   line-height: 1.5;
 }
 
-/* Graph view — yr-style 2a meteogram */
+/* Graph view — map-panel 2a meteogram */
 .graph-view-2a {
   flex: 1;
   min-height: 0;
@@ -743,7 +743,7 @@ input:focus-visible,
   flex-direction: column;
   overflow: hidden;
 }
-.graph-yr {
+.graph-panel {
   flex: 1;
   min-height: 0;
   display: flex;
@@ -753,7 +753,7 @@ input:focus-visible,
 }
 /* The chart fills the available height; it should not introduce its own
    vertical scrollbar — the SVG is sized to fit the lane region. */
-.yr-chart-fit {
+.chart-fit {
   flex: 1;
   min-height: 0;
   display: flex;
@@ -767,8 +767,8 @@ input:focus-visible,
    overflows; at a comfortable size the full meteogram fits with no scroll (B3).
    The landscape (is-fullscreen) view fit-scales and the expanded (is-expanded)
    two-column view scrolls its own .exp-right column — both excluded here. */
-.page.wide:not(.is-fullscreen):not(.is-expanded) .graph-yr { overflow-y: auto; }
-.page.wide:not(.is-fullscreen):not(.is-expanded) .yr-chart-fit {
+.page.wide:not(.is-fullscreen):not(.is-expanded) .graph-panel { overflow-y: auto; }
+.page.wide:not(.is-fullscreen):not(.is-expanded) .chart-fit {
   flex: none;
   overflow: visible;
 }
@@ -791,7 +791,7 @@ input:focus-visible,
 .readout-2a .ro-temp { font-size: 17px; }
 .readout-2a .ro-precip, .readout-2a .ro-wind { font-size: 12px; }
 .readout-side { display: flex; align-items: center; gap: 8px; flex: none; }
-.yr-fs-btn {
+.chart-fs-btn {
   width: 32px;
   height: 32px;
   flex: none;
@@ -803,18 +803,18 @@ input:focus-visible,
   justify-content: center;
   cursor: pointer;
 }
-.yr-chart {
+.chart {
   display: flex;
   align-items: flex-start;
   flex: none;
   padding-left: 14px;
 }
-.yr-lane {
+.chart-lane {
   pointer-events: none;
 }
 /* Pinned right-hand precip (mm) scale — stays put while the plot scrolls. */
-.yr-axis-right { flex: none; }
-.yr-scroll {
+.chart-axis-right { flex: none; }
+.chart-scroll {
   overflow-x: auto;
   overflow-y: visible;
   flex: 1;
@@ -822,11 +822,11 @@ input:focus-visible,
   position: relative;
   -webkit-overflow-scrolling: touch;
 }
-.yr-scroll svg text { pointer-events: none; }
-.yr-lane .yr-chip { font-size: 10px; padding: 2px 7px; border-radius: 7px; }
-.yr-swatch-temp { background: #C81D25 !important; }
-.yr-swatch-pmax { background: #B9D6EF !important; }
-.yr-legend { flex: none; gap: 5px 11px; padding: 6px 16px 14px; font-size: 10px; }
+.chart-scroll svg text { pointer-events: none; }
+.chart-lane .chart-chip { font-size: 10px; padding: 2px 7px; border-radius: 7px; }
+.chart-swatch-temp { background: #C81D25 !important; }
+.chart-swatch-pmax { background: #B9D6EF !important; }
+.chart-legend { flex: none; gap: 5px 11px; padding: 6px 16px 14px; font-size: 10px; }
 
 /* ── Time scrubber — subtle dot on the chart's top edge ──────────────────
    An invisible 24px drag strip overlaid on the top of the plot, carrying a
@@ -854,9 +854,9 @@ input:focus-visible,
   box-shadow: 0 1px 4px rgba(13, 30, 45, 0.3);
   pointer-events: none;
 }
-/* Chart cursor driven by the scrubber (inside .yr-scroll, over the plot).
+/* Chart cursor driven by the scrubber (inside .chart-scroll, over the plot).
    The child combinator keeps this off the SVG <line class="scrub-cursor">. */
-.yr-scroll > .scrub-cursor {
+.chart-scroll > .scrub-cursor {
   position: absolute;
   top: 0;
   bottom: 0;
@@ -867,9 +867,9 @@ input:focus-visible,
 }
 /* The HTML cursor + top-edge dot replace the in-SVG dashed cursor and lane
    dots in fullscreen landscape (the design wants a single minimal line). */
-.is-fullscreen .yr-plot .scrub-cursor,
-.is-fullscreen .yr-plot .scrub-dot-temp,
-.is-fullscreen .yr-plot .scrub-dot-wind {
+.is-fullscreen .chart-plot .scrub-cursor,
+.is-fullscreen .chart-plot .scrub-dot-temp,
+.is-fullscreen .chart-plot .scrub-dot-wind {
   display: none;
 }
 

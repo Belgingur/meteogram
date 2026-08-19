@@ -3,16 +3,16 @@ import { describe, expect, it } from "vitest";
 import {
   ARROW_STRIP_MIN,
   CHART_FIT_SELECTORS,
+  CHART_SPEC,
+  chartHeaderBaselines,
+  chartLaneChipY,
   fittedLaneY,
   fittedWidth,
   hasArrowStrip,
   MIN_FIT_HEIGHT,
+  resolveChartBands,
   resolveChartFit,
-  resolveYrBands,
-  YR_SPEC,
-  yrHeaderBaselines,
-  yrLaneChipY,
-  type YrSpec,
+  type ChartSpec,
 } from "../src/layout";
 import { labels } from "../src/i18n";
 import { chartBlock } from "../src/map-panel-graph";
@@ -25,7 +25,7 @@ import type { HourPoint } from "../src/types";
  * exist so the tests can show the model is faithful and say exactly what the
  * shared spec moved.
  */
-const LEGACY_COMPACT_SPEC: YrSpec = {
+const LEGACY_COMPACT_SPEC: ChartSpec = {
   headerPx: 40,
   // The legacy charts had no symbol row — the glyphs floated in the temp lane.
   symbolsPx: 0,
@@ -35,7 +35,7 @@ const LEGACY_COMPACT_SPEC: YrSpec = {
   wind: 68,
 };
 
-const LEGACY_FULLSCREEN_SPEC: YrSpec = {
+const LEGACY_FULLSCREEN_SPEC: ChartSpec = {
   headerPx: 66,
   symbolsPx: 0,
   arrowsPx: 74,
@@ -44,16 +44,16 @@ const LEGACY_FULLSCREEN_SPEC: YrSpec = {
   wind: 130,
 };
 
-/** Chart heights the yr renderer is asked for across the four surfaces. */
+/** Chart heights the panel renderer is asked for across the four surfaces. */
 const HEIGHTS = [140, 180, 200, 262, 360, 560, 900, 1400];
 
-describe("resolveYrBands", () => {
+describe("resolveChartBands", () => {
   it("reproduces the geometry each chart was hand-typed with", () => {
     // Proof that the band model is faithful: fed the old fixed/flex split, it
     // returns the exact pixel tables that used to be typed out by hand. Any
     // difference from today's charts is therefore the shared spec's doing, not
     // the mechanism's.
-    expect(resolveYrBands(LEGACY_COMPACT_SPEC, 262)).toEqual({
+    expect(resolveChartBands(LEGACY_COMPACT_SPEC, 262)).toEqual({
       height: 262,
       symbolTop: 40,
       symbolsPx: 0,
@@ -64,7 +64,7 @@ describe("resolveYrBands", () => {
       windBase: 250,
       plotBottom: 250,
     });
-    expect(resolveYrBands(LEGACY_FULLSCREEN_SPEC, 560)).toEqual({
+    expect(resolveChartBands(LEGACY_FULLSCREEN_SPEC, 560)).toEqual({
       height: 560,
       symbolTop: 66,
       symbolsPx: 0,
@@ -82,11 +82,11 @@ describe("resolveYrBands", () => {
     // same height as a desktop overlay's, so the text does not get inflated or
     // crushed by how tall the chart happens to be.
     for (const height of HEIGHTS) {
-      const bands = resolveYrBands(YR_SPEC, height);
+      const bands = resolveChartBands(CHART_SPEC, height);
       // plotTop is the header plus the symbol row, so the header itself is what
       // is left when the row it gained is taken back off.
-      expect(bands.plotTop - bands.symbolsPx).toBe(YR_SPEC.headerPx);
-      expect(bands.height - bands.plotBottom).toBe(YR_SPEC.arrowsPx);
+      expect(bands.plotTop - bands.symbolsPx).toBe(CHART_SPEC.headerPx);
+      expect(bands.height - bands.plotBottom).toBe(CHART_SPEC.arrowsPx);
     }
   });
 
@@ -95,18 +95,18 @@ describe("resolveYrBands", () => {
     // 262px compact chart rather than resolving bands that short. Everything a
     // renderer actually asks for can afford the row.
     for (const height of HEIGHTS.filter((h) => h >= 180)) {
-      expect(resolveYrBands(YR_SPEC, height).symbolsPx).toBe(YR_SPEC.symbolsPx);
+      expect(resolveChartBands(CHART_SPEC, height).symbolsPx).toBe(CHART_SPEC.symbolsPx);
     }
     // And when it cannot, the row gives way instead of the header or the arrows.
-    const cramped = resolveYrBands(YR_SPEC, 140);
-    expect(cramped.symbolsPx).toBeLessThan(YR_SPEC.symbolsPx);
-    expect(cramped.plotTop - cramped.symbolsPx).toBe(YR_SPEC.headerPx);
-    expect(cramped.height - cramped.plotBottom).toBe(YR_SPEC.arrowsPx);
+    const cramped = resolveChartBands(CHART_SPEC, 140);
+    expect(cramped.symbolsPx).toBeLessThan(CHART_SPEC.symbolsPx);
+    expect(cramped.plotTop - cramped.symbolsPx).toBe(CHART_SPEC.headerPx);
+    expect(cramped.height - cramped.plotBottom).toBe(CHART_SPEC.arrowsPx);
   });
 
   it("gives every size the same lane proportions", () => {
     const share = (height: number) => {
-      const b = resolveYrBands(YR_SPEC, height);
+      const b = resolveChartBands(CHART_SPEC, height);
       const lanes = b.plotBottom - b.plotTop;
       return (b.tempBase - b.tempTop) / lanes;
     };
@@ -118,9 +118,9 @@ describe("resolveYrBands", () => {
   });
 
   it("keeps the bands ordered and inside the chart at any height", () => {
-    for (const spec of [YR_SPEC, LEGACY_COMPACT_SPEC, LEGACY_FULLSCREEN_SPEC]) {
+    for (const spec of [CHART_SPEC, LEGACY_COMPACT_SPEC, LEGACY_FULLSCREEN_SPEC]) {
       for (const height of HEIGHTS) {
-        const b = resolveYrBands(spec, height);
+        const b = resolveChartBands(spec, height);
         expect(b.plotTop).toBeGreaterThanOrEqual(0);
         expect(b.tempBase).toBeGreaterThan(b.tempTop);
         expect(b.windTop).toBeGreaterThanOrEqual(b.tempBase);
@@ -131,13 +131,13 @@ describe("resolveYrBands", () => {
   });
 
   it("yields to the lanes rather than crushing them on a very short chart", () => {
-    const bands = resolveYrBands(YR_SPEC, 90);
-    expect(bands.plotTop).toBeLessThan(YR_SPEC.headerPx);
+    const bands = resolveChartBands(CHART_SPEC, 90);
+    expect(bands.plotTop).toBeLessThan(CHART_SPEC.headerPx);
     expect(bands.plotBottom - bands.plotTop).toBeGreaterThanOrEqual(55);
   });
 
   it("does not compound rounding error down the stack", () => {
-    const spec: YrSpec = {
+    const spec: ChartSpec = {
       headerPx: 7,
       symbolsPx: 0,
       arrowsPx: 5,
@@ -146,13 +146,13 @@ describe("resolveYrBands", () => {
       wind: 11,
     };
     const height = 333;
-    const b = resolveYrBands(spec, height);
+    const b = resolveChartBands(spec, height);
     const lanes = height - 12;
     expect(b.plotBottom).toBe(7 + Math.round(((13 + 3 + 11) / 27) * lanes));
   });
 
   it("degrades safely for a spec with no lanes", () => {
-    const zero: YrSpec = {
+    const zero: ChartSpec = {
       headerPx: 0,
       symbolsPx: 0,
       arrowsPx: 0,
@@ -160,7 +160,7 @@ describe("resolveYrBands", () => {
       gap: 0,
       wind: 0,
     };
-    expect(() => resolveYrBands(zero, 262)).not.toThrow();
+    expect(() => resolveChartBands(zero, 262)).not.toThrow();
   });
 });
 
@@ -170,22 +170,22 @@ describe("hasArrowStrip", () => {
     // inside the wind lane, on top of the line. Now every size draws them in
     // the same place.
     for (const height of HEIGHTS) {
-      expect(hasArrowStrip(resolveYrBands(YR_SPEC, height))).toBe(true);
+      expect(hasArrowStrip(resolveChartBands(CHART_SPEC, height))).toBe(true);
     }
-    expect(YR_SPEC.arrowsPx).toBeGreaterThanOrEqual(ARROW_STRIP_MIN);
+    expect(CHART_SPEC.arrowsPx).toBeGreaterThanOrEqual(ARROW_STRIP_MIN);
   });
 
   it("still reports the old panel geometry as having none", () => {
-    expect(hasArrowStrip(resolveYrBands(LEGACY_COMPACT_SPEC, 262))).toBe(false);
+    expect(hasArrowStrip(resolveChartBands(LEGACY_COMPACT_SPEC, 262))).toBe(false);
   });
 });
 
-describe("yrHeaderBaselines", () => {
+describe("chartHeaderBaselines", () => {
   it("keeps both label rows inside the header, above the plot", () => {
     for (const height of HEIGHTS) {
       for (const size of [10, 13, 16, 20]) {
-        const bands = resolveYrBands(YR_SPEC, height);
-        const { dayLabelY, hourLabelY } = yrHeaderBaselines(bands, size);
+        const bands = resolveChartBands(CHART_SPEC, height);
+        const { dayLabelY, hourLabelY } = chartHeaderBaselines(bands, size);
         expect(dayLabelY).toBeGreaterThan(0);
         expect(hourLabelY).toBeGreaterThan(dayLabelY);
         // The regression this guards: an hour-label baseline below plotTop puts
@@ -196,8 +196,8 @@ describe("yrHeaderBaselines", () => {
   });
 
   it("reproduces the panel's original baselines for its own type size", () => {
-    const bands = resolveYrBands(LEGACY_COMPACT_SPEC, 262);
-    expect(yrHeaderBaselines(bands, 13)).toEqual({
+    const bands = resolveChartBands(LEGACY_COMPACT_SPEC, 262);
+    expect(chartHeaderBaselines(bands, 13)).toEqual({
       dayLabelY: 15,
       hourLabelY: 32,
     });
@@ -244,15 +244,15 @@ describe("fitted dimensions", () => {
 
 describe("CHART_FIT_SELECTORS", () => {
   /** A chart layout resolved the way the renderer resolves one. */
-  const resolveYrLayoutForTest = () => ({
+  const resolveChartLayoutForTest = () => ({
     colW: 42,
     axisW: 52,
     rightAxisW: 28,
     axisFont: 11,
-    ...resolveYrBands(YR_SPEC, 560),
-    precipBase: resolveYrBands(YR_SPEC, 560).tempBase,
-    ...yrHeaderBaselines(resolveYrBands(YR_SPEC, 560), 16),
-    laneChipY: yrLaneChipY(resolveYrBands(YR_SPEC, 560), 84),
+    ...resolveChartBands(CHART_SPEC, 560),
+    precipBase: resolveChartBands(CHART_SPEC, 560).tempBase,
+    ...chartHeaderBaselines(resolveChartBands(CHART_SPEC, 560), 16),
+    laneChipY: chartLaneChipY(resolveChartBands(CHART_SPEC, 560), 84),
     tempLo: 0,
     tempHi: 10,
     tempTicks: [0, 5, 10],
@@ -299,29 +299,29 @@ describe("CHART_FIT_SELECTORS", () => {
       0,
       0,
       0,
-      resolveYrLayoutForTest(),
+      resolveChartLayoutForTest(),
       true,
     );
-    const rendered = [...html.matchAll(/<svg class="(yr-[\w-]+)"/g)].map(
+    const rendered = [...html.matchAll(/<svg class="(chart-[\w-]+)"/g)].map(
       (m) => `.${m[1]}`,
     );
-    expect(rendered.sort()).toEqual([".yr-axis", ".yr-axis-right", ".yr-plot"]);
+    expect(rendered.sort()).toEqual([".chart-axis", ".chart-axis-right", ".chart-plot"]);
     for (const selector of rendered) {
       expect(CHART_FIT_SELECTORS).toContain(selector);
     }
   });
 
   it("lists the plot itself, which anchors the scale", () => {
-    expect(CHART_FIT_SELECTORS).toContain(".yr-plot");
+    expect(CHART_FIT_SELECTORS).toContain(".chart-plot");
   });
 });
 
-describe("yrLaneChipY", () => {
+describe("chartLaneChipY", () => {
   it("puts each chip inside its own lane, clear of the tallest precip bar", () => {
     for (const height of [200, 262, 560, 900]) {
-      const bands = resolveYrBands(YR_SPEC, height);
+      const bands = resolveChartBands(CHART_SPEC, height);
       const precipCap = Math.round((height / 262) * 44);
-      const [temp, precip, wind] = yrLaneChipY(bands, precipCap);
+      const [temp, precip, wind] = chartLaneChipY(bands, precipCap);
       expect(temp).toBeGreaterThanOrEqual(bands.tempTop);
       expect(temp).toBeLessThan(bands.tempBase);
       expect(precip).toBeLessThanOrEqual(bands.tempBase - precipCap);
@@ -331,7 +331,7 @@ describe("yrLaneChipY", () => {
   });
 
   it("reproduces the panel's original chip positions", () => {
-    const bands = resolveYrBands(LEGACY_COMPACT_SPEC, 262);
-    expect(yrLaneChipY(bands, 44)).toEqual([48, 120, 190]);
+    const bands = resolveChartBands(LEGACY_COMPACT_SPEC, 262);
+    expect(chartLaneChipY(bands, 44)).toEqual([48, 120, 190]);
   });
 });
