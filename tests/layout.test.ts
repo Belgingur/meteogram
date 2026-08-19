@@ -268,6 +268,7 @@ describe("CHART_FIT_SELECTORS", () => {
     dayLabelSize: 16,
     hourLabelSize: 11,
     tempLabelEvery: 0,
+    tempLabelFont: 11,
     windLabelEvery: 0,
     symbolEvery: 2,
     arrowEvery: 2,

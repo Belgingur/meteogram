@@ -15,6 +15,7 @@ import {
   PRECIP_TICK_COLOR,
   precipTicksFor,
   temperatureTicks,
+  TEMP_LABEL_CAP,
   TICK_COLOR,
   TICK_LABEL_DY,
   windTicksFor,
@@ -77,6 +78,8 @@ interface YrLayout {
   hourLabelY: number;
   hourLabelSize: number;
   tempLabelEvery: number;
+  /** Type size of the inline temperature value labels */
+  tempLabelFont: number;
   windLabelEvery: number;
   symbolEvery: number;
   arrowEvery: number;
@@ -124,10 +127,17 @@ const YR_COMPACT: YrLayout = {
   plotPad: 8,
   dayLabelSize: 13,
   hourLabelSize: 10,
-  tempLabelEvery: 0,
+  // Value labels every other column: "12°" is ~17px of type in a 26px column,
+  // so every column would collide. Same rule as the symbols below.
+  tempLabelEvery: 2,
+  tempLabelFont: 10,
   windLabelEvery: 0,
+  // Arrows are narrow enough for one per column at colW 26; the 20px weather
+  // glyphs are not — hourly data draws them 6px apart and they read as a smear,
+  // so the docked panel keeps every second one. The expanded and fullscreen
+  // layouts have the column width to show them all.
   symbolEvery: 2,
-  arrowEvery: 2,
+  arrowEvery: 1,
   gridEvery: 2,
   tempStroke: 2.4,
   windStroke: 2.1,
@@ -153,13 +163,15 @@ const YR_FULLSCREEN: YrLayout = {
   plotPad: 16,
   dayLabelSize: 16,
   hourLabelSize: 11,
-  // No inline temp/wind value labels on the lines — every other view (compact
-  // desktop, landscape) omits them, so the expanded two-column view matches
-  // instead of being the odd one out. Values are read from the scrub readout.
-  tempLabelEvery: 0,
+  // Temperature values sit on the line in every view now (the meteogram card
+  // always did), so the panel reads the same way as the card. Wind values stay
+  // off: the wind lane carries a gust line as well, and two numbers per column
+  // there was noise — that value is in the scrub readout.
+  tempLabelEvery: 1,
+  tempLabelFont: 11,
   windLabelEvery: 0,
-  symbolEvery: 2,
-  arrowEvery: 2,
+  symbolEvery: 1,
+  arrowEvery: 1,
   gridEvery: 1,
   tempStroke: 2.8,
   windStroke: 2.4,
@@ -182,8 +194,14 @@ function text(
   size: number,
   weight: number,
   anchor: "start" | "middle" | "end" = "start",
+  /** White casing behind the glyphs, `paint-order` keeping the letterform crisp
+   *  — for labels that unavoidably land on other ink. Same device as render.ts. */
+  halo = false,
 ): string {
-  return `<text x="${x}" y="${y}" fill="${fill}" font-size="${size}" font-weight="${weight}" text-anchor="${anchor}" font-family="Nunito, system-ui, sans-serif">${esc(label)}</text>`;
+  const casing = halo
+    ? ` stroke="#ffffff" stroke-width="3" stroke-linejoin="round" paint-order="stroke"`
+    : "";
+  return `<text x="${x}" y="${y}" fill="${fill}" font-size="${size}" font-weight="${weight}" text-anchor="${anchor}" font-family="Nunito, system-ui, sans-serif"${casing}>${esc(label)}</text>`;
 }
 
 function linePath(
@@ -528,14 +546,29 @@ function buildPlotSvg(
     }
   }
 
+  // Temperature values above the line, flipping under it where "above" would
+  // cross the plot's ceiling, with a white casing so a label crossing a gridline
+  // or the scrub cursor stays readable. Same rule and look as the card's.
   if (L.tempLabelEvery > 0) {
+    const cap = L.tempLabelFont * TEMP_LABEL_CAP;
+    const dy = Math.round(L.tempLabelFont * 0.8);
     for (let i = 0; i < n; i += L.tempLabelEvery) {
       const v = points[i].tempC;
-      if (v !== null) {
-        parts.push(
-          text(cx(i), ty(v) - 8, `${Math.round(v)}°`, tempColorYr(Math.round(v)), 11, 800, "middle"),
-        );
-      }
+      if (v === null) continue;
+      const above = ty(v) - dy;
+      const y = above - cap < L.tempTop ? ty(v) + dy + cap : above;
+      parts.push(
+        text(
+          cx(i),
+          y,
+          `${Math.round(v)}°`,
+          tempColorYr(Math.round(v)),
+          L.tempLabelFont,
+          800,
+          "middle",
+          true,
+        ),
+      );
     }
   }
 
