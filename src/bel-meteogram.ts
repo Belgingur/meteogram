@@ -7,12 +7,7 @@ import {
   stationDataUrl,
   type ApiOptions,
 } from "./api";
-import {
-  indexAtInstant,
-  nowIndex,
-  renderGraphCard,
-  timestepHours,
-} from "./graph-card";
+import { indexAtInstant, nowIndex, renderGraphCard } from "./graph-card";
 import { labels, type Labels } from "./i18n";
 import {
   coordLabel,
@@ -39,8 +34,9 @@ import { toHourPoints } from "./transform";
 import type { ForecastUrl, HourPoint, StationMetadata } from "./types";
 
 const FONT_LINK_ID = "bel-meteogram-nunito";
-/** Hours fetched in full mode so the table can show a week */
-const FULL_MODE_HOURS = 168;
+/** Hours of synthetic data full mode invents in `sample` mode. Real loads are
+ *  not capped — they take the whole run (see load()). */
+const SAMPLE_FULL_HOURS = 168;
 /** How far the chart column's height must move during a resize drag before the
  *  graph is rebuilt. Small enough to read as continuous, large enough that a
  *  long chart's rebuild cost lands a few times per drag rather than per pixel. */
@@ -62,11 +58,11 @@ interface MapPanelPersisted {
   /**
    * The scrubbed hour as an ABSOLUTE instant (epoch ms), never as a column
    * index. An index only means something next to the window it was measured in,
-   * and this widget builds three different ones — the graph card counts from the
-   * forecast's analysis time, `graphPoints()` counts from now, the table groups
-   * by day — so a stored index silently became a different hour depending on
-   * which view read it back, and a different hour again tomorrow. A timestamp
-   * means the same thing everywhere, and can be checked for having passed.
+   * and this widget builds several — the graph card's `hours` slice, full mode's
+   * whole run, the table's per-day groups — so a stored index silently became a
+   * different hour depending on which view read it back, and a different hour
+   * again once a new run moved where the window starts. A timestamp means the
+   * same thing everywhere, and can be checked for having passed.
    *
    * The old `scrubIdx` key is deliberately not read: any value still in
    * localStorage from a previous build is exactly the ambiguous number this
@@ -260,10 +256,10 @@ export class BelMeteogram extends HTMLElement {
       return;
     }
     if (this.view !== "graph" || !this.points.length) return;
-    // The window the CHART was built from, not a freshly computed one:
-    // graphPoints() slices from "now", so recomputing it here would shift every
-    // column by one the moment the hour rolls over while the panel is open —
-    // and then this index would address a different hour than the one on screen.
+    // The series the CHART was built from, not the current one: the keys address
+    // columns, and a column number only names an hour next to the exact series
+    // it was measured in. A load landing mid-keypress would otherwise step to a
+    // different hour than the one the cursor is sitting on.
     const gp = this.renderedGraphPoints;
     if (!gp.length) return;
     // Start from the cursor on screen, which after a restore is NOT column 0.
@@ -614,7 +610,9 @@ export class BelMeteogram extends HTMLElement {
     this.scrubIdx = -1;
 
     if (this.hasAttribute("sample")) {
-      this.points = sampleHourPoints(this.isFull ? FULL_MODE_HOURS : this.hours);
+      this.points = sampleHourPoints(
+        this.isFull ? SAMPLE_FULL_HOURS : this.hours,
+      );
       if (this.isFull) {
         this.rawForecasts = sampleModels.map((m) => ({ ...m, url: "" }));
         this.rawStations = samplePlaces.map((p, i) => ({
@@ -676,17 +674,20 @@ export class BelMeteogram extends HTMLElement {
       this.forecastId = forecast.id;
 
       const meta = await loadForecastMetadata(forecast.url);
-      const duration = this.isFull
-        ? Math.max(this.hours, FULL_MODE_HOURS)
-        : this.hours;
+      // Full mode takes the whole run: no `duration` on the request and no cap
+      // on the transform, so the window is whatever the forecast actually has —
+      // three days from a short-range model, a fortnight from a long one. Graph
+      // mode keeps its `hours` window so a card embed still downloads two days,
+      // not two weeks.
+      const windowH = this.isFull ? Infinity : this.hours;
       const data = await loadMeteogramData(
-        stationDataUrl(meta, lat, lon, duration),
+        stationDataUrl(meta, lat, lon, this.isFull ? undefined : this.hours),
         opts,
       );
       if (token !== this.loadToken) return; // superseded by a newer load
       this.rawForecasts = forecasts;
       this.rawStations = meta.stations ?? [];
-      this.points = toHourPoints(data.data, duration);
+      this.points = toHourPoints(data.data, windowH);
       // "Last update" prefers the body's last_modified, then the HTTP header.
       this.lastModified = data.data.last_modified
         ? new Date(data.data.last_modified)
@@ -916,11 +917,19 @@ export class BelMeteogram extends HTMLElement {
     this.scrubUtcMs = p.utcMs;
   }
 
-  /** The graph window (from "now") shown in the meteogram card / panel */
+  /**
+   * The graph window shown in the full-mode card / panel: the whole run, the
+   * hours already elapsed included.
+   *
+   * It used to start at "now", and that is what put the present hour under the
+   * sticky lane chips: with no columns to the left of it, the cursor cannot be
+   * centred (or scrolled) away from the chrome pinned to the left edge, because
+   * scrollLeft has nowhere to go. Keeping the elapsed hours gives the view
+   * something to spend on the left, and matches both the meteogram card and the
+   * day table beside it, which have always listed them.
+   */
   private graphPoints(): HourPoint[] {
-    const nowI = nowIndex(this.points);
-    const count = Math.ceil(this.hours / timestepHours(this.points));
-    return this.points.slice(nowI, nowI + count);
+    return this.points;
   }
 
   private closeBtnHtml(cls: string, t: Labels): string {
@@ -1034,19 +1043,21 @@ export class BelMeteogram extends HTMLElement {
     if (host && this.status === "ready") {
       const gp = this.graphPoints();
       this.renderedGraphPoints = gp;
-      // `gp` starts at now, so 0 IS the current hour here — the fallback differs
-      // from graph mode's only because the window does.
+      // The window opens at the run's start, not at "now", so the current hour
+      // is a column part-way in — both the cursor's home and what the "now"
+      // marker is drawn against.
+      const nowI = nowIndex(gp);
       const carried =
         this.scrubIdx >= 0 ? this.scrubIdx : this.restoreScrubIndex(gp);
       const initial = Math.max(
         0,
-        Math.min(gp.length - 1, carried >= 0 ? carried : 0),
+        Math.min(gp.length - 1, carried >= 0 ? carried : nowI),
       );
       this.renderedScrubIdx = initial;
       if (wide) {
         const { setScrubIdx } = renderMapPanelGraph(host, gp, {
           scrubIdx: initial,
-          nowIdx: 0,
+          nowIdx: nowI,
           anaIdx: this.analysisIndex(gp),
           onScrub: (i) => {
             this.noteScrub(gp, i);

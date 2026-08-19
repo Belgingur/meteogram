@@ -61,16 +61,27 @@ export async function loadForecastMetadata(
   return response.json();
 }
 
+/**
+ * Point-data URL for a forecast. Omit `hours` to ask for the whole run: with no
+ * `duration` the API returns every timestep the forecast has, and an oversized
+ * `duration` returns the same — the run's own length is the only real cap.
+ *
+ * The metadata's `duration_h` is deliberately NOT used to clamp. It is a
+ * config-declared number that can undercount what the model actually serves
+ * (ECMWF-0p25 declares 72 h and returns 90 h), so clamping by it silently threw
+ * away real forecast hours.
+ */
 export function stationDataUrl(
   forecast: ForecastMetadata,
   lat: number,
   lon: number,
-  hours: number,
+  hours?: number,
 ): string {
-  const duration = Math.min(hours, forecast.duration_h || hours);
+  const query =
+    hours !== undefined && Number.isFinite(hours) ? `?duration=${hours}h` : "";
   return forecast.station_data_url
     .replace("[station]", `latlon/${lat},${lon}`)
-    .replace("meteogram.xml", `meteogram.json?duration=${duration}h`);
+    .replace("meteogram.xml", `meteogram.json${query}`);
 }
 
 export interface MeteogramFetchResult {
