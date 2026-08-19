@@ -22,6 +22,10 @@ modes:
      horizontally-scrolling **day-chip row**, a **Table/Graph switch**
      (defaults to Graph), and either the selected day's 24-hour table or a
      **compact meteogram**. The panel owns its own scroll; the host docks it.
+     The selector chip summarises the state as
+     `{model} · {place} · {language} · {zone}` — the zone being the forecast
+     point's UTC offset, since the chart is drawn in the point's local time
+     while the map around it runs on the browser's clock.
 
    Settings (forecast model, language, station search — stations ordered
    nearest-first) live in the overlay. All wired to real Belgingur WRF data.
@@ -29,7 +33,7 @@ modes:
 Compared to the previous Belgingur meteogram widget (Lit + Vega + Leaflet),
 this build is vanilla TypeScript with a hand-built SVG renderer and no runtime
 dependencies. Everything — styles and the Yr weather symbol set — is inlined
-into **one JS file** (~44 kB gzipped).
+into **one JS file** (~50 kB gzipped).
 
 ## Design spec highlights
 
@@ -37,18 +41,20 @@ into **one JS file** (~44 kB gzipped).
 - SVG height 358, **stacked labelled lanes** sharing one hour axis, showing
   all five variables of the current site's meteogram:
   - Day header (labels y 12) with dashed day boundaries.
-  - Weather symbols every 2 h.
+  - Weather symbols in a row of their own (y 14), one per timestep.
   - **Scrub track** at y 39 between the symbols and the temp lane.
   - **Hiti** lane (y 44–140): nice-step gridlines, temp polyline `#D14B4B`
-    2.5 px, value labels every 3 h (temperature color rule: > 0 °C red,
-    < 0 °C blue, 0 °C neutral).
+    2.5 px, a value label per timestep (temperature color rule: > 0 °C red,
+    < 0 °C blue, 0 °C neutral), white-cased and flipped below the curve
+    where placing it above would cross the lane's ceiling.
   - **Úrkoma** lane (baseline y 226, 28 px/mm, cap 62): per hour a
     *hámarksúrkoma* bar behind (20 px, `#A8CBEA`) and the mean *úrkoma*
-    bar in front (16 px, `#3D82C4`); axis labels at 1 and 2 mm.
+    bar in front (16 px, `#3D82C4`); axis labels derived from how far the
+    bars can actually reach before the cap (1 and 2 mm at this scale).
   - **Vindur** lane (y 246–306): gust line dashed `#7FB394` behind, wind
     line solid `#3E8E63` on top; 0–20 m/s per the handoff, domain extended
-    to the next multiple of 10 when data exceeds it; direction arrows every
-    3 h (rotated to *direction + 180°*).
+    to the next multiple of 10 when data exceeds it; a direction arrow per
+    timestep (rotated to *direction + 180°*).
   - Hour labels every 3 h (y 350).
 - **Scrubber (v3)** — a time cursor with track (y 39), handle, dashed
   cursor line and value dots on the temp/wind curves. Mouse hover anywhere
@@ -60,8 +66,10 @@ into **one JS file** (~44 kB gzipped).
   8-point compass label, and the hour's weather symbol at 38 px. Replaces
   the old floating hover tooltip.
 - **Pinned lane chips** ("Hiti" / "Úrkoma" / "Vindur") — sticky at
-  `left: 38px` inside the scroll container (38 px keeps them clear of the
-  axis value column).
+  `left: 4px` inside the scroll container; the value axes are pinned strips
+  outside it, so the chips no longer have a gutter to clear. Opening the
+  card scrolls the cursor's hour past them, since they are painted over the
+  plot.
 - Five-item legend: Hiti (°C) · Úrkoma (mm) · Hámarksúrkoma (mm) ·
   Vindur (m/s) · Vindhviða (m/s).
 - **Settings overlay (v3)** — one surface for forecast model, language and
@@ -71,8 +79,13 @@ into **one JS file** (~44 kB gzipped).
   Model + language choices persist in `localStorage`.
 - Nunito typography (loaded once at document level), handoff color tokens
   throughout; loading skeletons and an error state with retry.
-- Forecasts with 3 h / 6 h timesteps are handled: the "Næstu N klst."
-  title and the full-mode 48 h window are computed from the real timestep.
+- Forecasts with 3 h / 6 h timesteps are handled: the "Næstu N klst." title
+  is computed from the real timestep rather than from a column count.
+- Full mode shows the **whole run** — every hour the forecast has, elapsed
+  hours included — so a short-range model gives three days and a long-range
+  one a fortnight, and the chart, the day chips and the table all cover the
+  same span. Graph mode keeps its `hours` window, so a card embed still
+  downloads two days rather than two weeks.
 
 Deviation from the handoff: station rows and the location subtitle show
 coordinates instead of elevation — the WOD forecast metadata does not
@@ -110,11 +123,14 @@ provide station elevations. Geolocation is also left to the host page
 
 The widget talks to the same WOD API as the previous widget:
 `{origin}/api/v2/widget/meteo/config/{client-name}` → forecast metadata →
-`…/meteogram.json?duration={hours}h`. As before, the script and the
+`…/meteogram.json[?duration={hours}h]`. As before, the script and the
 forecast API must share an origin unless `api-url` is set. In full mode the
 model chips come from the config's forecast list and the station list from
-the forecast metadata; the fetch window is extended to 168 h (clamped to
-the forecast duration) so the table can show a week.
+the forecast metadata, and the point request carries **no** `duration` at
+all, which is how the API returns the whole run. The metadata's `duration_h`
+is deliberately not used as a cap: it is a config-declared number that can
+undercount what the model actually serves (ECMWF-0p25 declares 72 h and
+returns 90), so clamping by it dropped real forecast hours.
 
 ### Attributes
 
@@ -127,7 +143,7 @@ the forecast duration) so the table can show a week.
 | `domain` | — | Domain integer (schedules only) |
 | `location-lat` / `location-lon` | — | Point to load |
 | `location-name` | _(nearest station)_ | Display name for the location block |
-| `hours` | `48` | Graph window (e.g. 48 or 72, clamped to forecast duration) |
+| `hours` | `48` | Graph-mode window (e.g. 48 or 72). Ignored in full mode, which takes the whole run |
 | `language` | `is` | `is` or `en` |
 | `mode` | `graph` | `graph` (card only) or `full` (landing experience) |
 | `view` | `table` | Initial full-mode view: `table` or `graph` |
@@ -176,6 +192,12 @@ table or compact meteogram). The docked panel fills its host's height and
 scrolls internally, so give the host a bounded height (e.g. dock it with
 `position: absolute; top/right/bottom` — see Mimir's `meteogram.css`).
 
+In the expanded (two-column) panel the graph resolves its geometry from the
+height its column actually has, rather than drawing a fixed 560 px chart and
+scrolling: the day header and the wind-arrow strip keep their designed pixel
+sizes at every height and the lanes take what is left, so the rows that tell
+a reader *when* and *which way* stay on screen in a short panel.
+
 ```css
 bel-meteogram {
   /* Desktop panel defaults shown; the widget also has sensible built-ins. */
@@ -213,8 +235,13 @@ the chrome: title, close button, scrim tap to close, and drag-to-dismiss.
 npm install
 npm run dev        # demo page (full + graph modes) at http://localhost:5173
 npm run typecheck
+npm test           # vitest
+npm run lint
 npm run build      # dist/bel-meteogram.js (single file, ES module)
 ```
+
+Node 20.19+ is required (see `.nvmrc`); CI runs typecheck, test and build on
+every pull request. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Source layout
 
@@ -224,11 +251,14 @@ src/
   api.ts             WOD widget API client (config → forecast → meteogram.json)
   transform.ts       meteogram.json → per-hour points (timezone shift, precip scaling)
   render.ts          SVG renderer implementing the handoff geometry + scrubber
+  layout.ts          chart geometry: band spec → y-coordinates, fit scaling
+  map-panel-graph.ts the docked/expanded panel's yr-style chart
   graph-card.ts      graph card: readout, lane chips, legend, scrub wiring
   landing.ts         full mode: now card, day list/chips, day detail, overlay
   symbol-code.ts     weather-variable → yr.no symbol code
   symbols.ts         symbol code → inlined SVG asset (see Licence below)
   i18n.ts            is/en strings
+  types.ts           API response + hour-point shapes
   styles.ts          card + landing + sheet CSS (handoff design tokens)
   sample.ts          generated sample data for dev/design review
   assets/symbols/    Yr weather symbols, CC BY 4.0 (see Licence below)
