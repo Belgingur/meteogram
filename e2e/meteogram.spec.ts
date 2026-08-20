@@ -26,11 +26,15 @@ test("renders mobile full mode and switches to the graph", async ({ page }) => {
   const mobile = page.locator("#mobile-full");
   await expect(mobile.locator(".page.narrow")).toBeVisible();
   await expect(mobile.locator(".tab[data-view='table']")).toHaveClass(/on/);
+  await expect(mobile.locator(".tab[data-view='table']")).toHaveAttribute("aria-pressed", "true");
+  await expect(mobile.locator(".tab[data-view='graph']")).toHaveAttribute("aria-pressed", "false");
   await expect(mobile.locator(".day-chip")).not.toHaveCount(0);
 
   await mobile.locator(".tab[data-view='graph']").click();
 
   await expect(mobile.locator(".tab[data-view='graph']")).toHaveClass(/on/);
+  await expect(mobile.locator(".tab[data-view='graph']")).toHaveAttribute("aria-pressed", "true");
+  await expect(mobile.locator(".tab[data-view='table']")).toHaveAttribute("aria-pressed", "false");
   await expect(mobile.locator(".graph-host svg.mg-plot")).toBeVisible();
 });
 
@@ -41,9 +45,13 @@ test("renders the desktop panel and switches to the table", async ({ page }) => 
   const panel = page.locator("#desktop-panel");
   await expect(panel.locator(".page.wide-2a")).toBeVisible();
   await expect(panel.locator(".graph-host svg.chart-plot")).toBeVisible();
+  await expect(panel.locator(".tab[data-view='graph']")).toHaveAttribute("aria-pressed", "true");
+  await expect(panel.locator(".tab[data-view='table']")).toHaveAttribute("aria-pressed", "false");
 
   await panel.locator(".tab[data-view='table']").click();
 
   await expect(panel.locator(".tab[data-view='table']")).toHaveClass(/on/);
+  await expect(panel.locator(".tab[data-view='table']")).toHaveAttribute("aria-pressed", "true");
+  await expect(panel.locator(".tab[data-view='graph']")).toHaveAttribute("aria-pressed", "false");
   await expect(panel.locator(".panel-table")).toBeVisible();
 });
