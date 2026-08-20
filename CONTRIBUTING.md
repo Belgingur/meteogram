@@ -48,8 +48,8 @@ Do not assign vague, security-sensitive, release, credential, or production
 infrastructure work to the agent without additional human planning and review.
 
 Repository maintainers should protect `main` by requiring pull requests, the
-**Typecheck, lint, test, and build** and **Playwright smoke tests** checks, and at
-least one human approval. Automated agent assignment and automatic merging are
+**Typecheck, lint, test, and build** check, the **Playwright smoke tests** check, and
+at least one human approval. Automated agent assignment and automatic merging are
 intentionally not part of this workflow.
 
 ## Relationship to Mímir
