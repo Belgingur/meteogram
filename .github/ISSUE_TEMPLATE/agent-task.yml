@@ -1,0 +1,63 @@
+name: Agent-ready change
+description: Define a scoped implementation task for a coding agent
+title: "[change]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Write observable acceptance criteria before assigning this issue to a coding agent.
+        Do not include secrets or private security reports.
+
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: What should change, and why is it valuable?
+      placeholder: As a user, I want...
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: List observable, testable conditions for completion.
+      placeholder: |
+        - [ ] ...
+        - [ ] Tests are added or updated
+        - [ ] Relevant mobile and desktop layouts work
+    validations:
+      required: true
+
+  - type: textarea
+    id: constraints
+    attributes:
+      label: Technical constraints
+      description: Note relevant files, APIs, conventions, and anything that must not change.
+      placeholder: Keep the public element attributes backward compatible...
+
+  - type: textarea
+    id: visual
+    attributes:
+      label: Visual reference or expected behavior
+      description: Add screenshots, mockups, links, or a precise description. Write "Not applicable" for non-UI work.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: ui_change
+    attributes:
+      label: Does this change visible or interactive UI?
+      options:
+        - "Yes — browser coverage and visual review are required"
+        - "No — unit/static validation is sufficient"
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: readiness
+    attributes:
+      label: Ready for assignment
+      options:
+        - label: The task is scoped, contains no secrets, and can be reviewed through a pull request.
+          required: true

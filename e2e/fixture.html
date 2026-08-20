@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>bel-meteogram browser fixture</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        padding: 24px;
+        color: #16324a;
+        background: #e7eff7;
+        font-family: system-ui, sans-serif;
+      }
+
+      .case {
+        margin-bottom: 32px;
+      }
+
+      .graph-case {
+        width: min(800px, 100%);
+      }
+
+      .panel-case {
+        position: relative;
+        width: min(1120px, 100%);
+        height: 840px;
+        overflow: hidden;
+        border-radius: 22px;
+        background: #7fb84a;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="case graph-case">
+        <bel-meteogram
+          id="graph-card"
+          sample
+          language="en"
+          hours="48"
+        ></bel-meteogram>
+      </section>
+
+      <section class="case">
+        <bel-meteogram
+          id="mobile-full"
+          mode="full"
+          sample
+          language="en"
+          hours="48"
+          view="table"
+        ></bel-meteogram>
+      </section>
+
+      <section class="case panel-case">
+        <bel-meteogram
+          id="desktop-panel"
+          mode="full"
+          sample
+          language="en"
+          hours="48"
+          view="graph"
+          closable
+        ></bel-meteogram>
+      </section>
+    </main>
+
+    <script type="module" src="/src/bel-meteogram.ts"></script>
+  </body>
+</html>
