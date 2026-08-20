@@ -1155,8 +1155,8 @@ export class BelMeteogram extends HTMLElement {
       ${nowCardHtml(nowPoint, t, 46, 58)}
       ${dayChipsHtml(days, si, false)}
       <div class="tabs">
-        <button class="tab${this.view === "table" ? " on" : ""}" type="button" data-view="table">${esc(t.table)}</button>
-        <button class="tab${this.view === "graph" ? " on" : ""}" type="button" data-view="graph">${esc(t.graph)}</button>
+        <button class="tab${this.view === "table" ? " on" : ""}" type="button" data-view="table" aria-pressed="${this.view === "table"}">${esc(t.table)}</button>
+        <button class="tab${this.view === "graph" ? " on" : ""}" type="button" data-view="graph" aria-pressed="${this.view === "graph"}">${esc(t.graph)}</button>
       </div>
       ${content}`;
   }
@@ -1175,8 +1175,8 @@ export class BelMeteogram extends HTMLElement {
     return `
       <div class="now-wrap">${nowCardHtml(nowPoint, t)}</div>
       <div class="tabs">
-        <button class="tab${this.view === "table" ? " on" : ""}" type="button" data-view="table">${esc(t.table)}</button>
-        <button class="tab${this.view === "graph" ? " on" : ""}" type="button" data-view="graph">${esc(t.graph)}</button>
+        <button class="tab${this.view === "table" ? " on" : ""}" type="button" data-view="table" aria-pressed="${this.view === "table"}">${esc(t.table)}</button>
+        <button class="tab${this.view === "graph" ? " on" : ""}" type="button" data-view="graph" aria-pressed="${this.view === "graph"}">${esc(t.graph)}</button>
       </div>
       ${content}`;
   }
@@ -1196,8 +1196,8 @@ export class BelMeteogram extends HTMLElement {
     const isGraph = this.view === "graph";
     const tabs = `
       <div class="tabs">
-        <button class="tab${isGraph ? "" : " on"}" type="button" data-view="table">${esc(t.table)}</button>
-        <button class="tab${isGraph ? " on" : ""}" type="button" data-view="graph">${esc(t.graph)}</button>
+        <button class="tab${isGraph ? "" : " on"}" type="button" data-view="table" aria-pressed="${!isGraph}">${esc(t.table)}</button>
+        <button class="tab${isGraph ? " on" : ""}" type="button" data-view="graph" aria-pressed="${isGraph}">${esc(t.graph)}</button>
       </div>`;
     const content = isGraph
       ? `<div class="graph-view graph-view-2a"><div class="graph-host"></div></div>`
