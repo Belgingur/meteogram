@@ -875,7 +875,7 @@ function readoutHtml(
     ? `<button class="ro-min" type="button" aria-label="${esc(t.minimize)}"></button>
        <button class="ro-close" type="button" aria-label="${esc(t.close)}"></button>`
     : "";
-  // The weather symbol sits with the values on the LEFT (task C3), not off on
+  // The weather symbol sits with the values on the LEFT, not off on
   // the right next to the expand/popup controls where it read as detached.
   return `
     <div class="readout readout-2a${fit ? " readout-pop" : ""}">
@@ -901,7 +901,7 @@ function readoutHtml(
     </div>`;
 }
 
-/** Render the map-panel 2a compact meteogram into `host`. */
+/** Render the map-panel compact meteogram into `host`. */
 export function renderMapPanelGraph(
   host: HTMLElement,
   points: HourPoint[],

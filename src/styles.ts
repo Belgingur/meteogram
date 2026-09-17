@@ -213,8 +213,8 @@ input:focus-visible,
 /*                                                                        */
 /* The layout is switched in JS at a 900px viewport breakpoint: the       */
 /* component adds .wide or .narrow to .page.                              */
-/*   .narrow — the mobile sheet (Mimir responsive v2).                    */
-/*   .wide   — map-panel 2a: draggable panel over the map                 */
+/*   .narrow — the mobile sheet.                    */
+/*   .wide   — map panel: draggable panel over the map                 */
 /* ===================================================================== */
 .page {
   position: relative;
@@ -231,7 +231,7 @@ input:focus-visible,
   max-width: var(--bel-meteogram-max-width, 430px);
   pointer-events: auto;
 }
-/* Map-panel 2a: draggable floating panel (440 px) over the map host. */
+/* Map panel: draggable floating panel (440 px) over the map host. */
 .page.wide {
   position: absolute;
   /* width/height are set inline by panelStyleAttr() (resize grip). These are
@@ -604,7 +604,7 @@ input:focus-visible,
 .wide .tab { border-radius: 10px; padding: 9px 0; font-size: 13.5px; }
 .wide .tab.on { box-shadow: 0 1px 3px rgba(20, 32, 43, 0.14); }
 
-/* ── Resizable panel (map-panel 2a) ──────────────────────────────────────────
+/* ── Resizable panel (map panel) ────────────────────────────────────────────
    The panel's width/height are set inline by panelStyleAttr(); the bottom-left
    grip drives resize. Past the width breakpoint the body switches to the two
    columns below (weather-now + table left, graph right); the meta footer sits
@@ -619,7 +619,7 @@ input:focus-visible,
 }
 .panel-resize-bl { left: 0; cursor: nesw-resize; }
 .panel-resize-br { right: 0; cursor: nwse-resize; }
-/* Visible corner-bracket affordance (task B2) so users see the panel is
+/* Visible corner-bracket affordance so users see the panel is
    resizable; brightens to the aurora accent on hover. */
 .panel-resize::before {
   content: "";
@@ -723,7 +723,7 @@ input:focus-visible,
   line-height: 1.5;
 }
 
-/* Graph view — map-panel 2a meteogram */
+/* Graph view — map-panel meteogram */
 .graph-view-2a {
   flex: 1;
   min-height: 0;
@@ -764,7 +764,7 @@ input:focus-visible,
    height and let the whole graph block (readout + chart + legend) scroll if the
    panel is too short — so the wind lane, legend and folded-in meta line are
    never clipped-and-unreachable. A scrollbar only appears when it actually
-   overflows; at a comfortable size the full meteogram fits with no scroll (B3).
+   overflows; at a comfortable size the full meteogram fits with no scroll.
    The landscape (is-fullscreen) view fit-scales and the expanded (is-expanded)
    two-column view scrolls its own .exp-right column — both excluded here. */
 .page.wide:not(.is-fullscreen):not(.is-expanded) .graph-panel { overflow-y: auto; }

@@ -110,7 +110,7 @@ export const samplePlaces = [
   { name: "Hveravellir", lat: 64.87, lon: -19.56 },
 ];
 
-/** Sample forecast-model list (the handoff's placeholder names) */
+/** Sample forecast-model list (placeholder names) */
 export const sampleModels = [
   { id: "sample/harmonie", name: "HARMONIE 2.5 km" },
   { id: "sample/wrf9", name: "WRF 9 km" },

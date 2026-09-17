@@ -5,7 +5,7 @@ import { symbolUrl } from "./symbols";
 import type { HourPoint } from "./types";
 
 /**
- * Full landing mode (mode="full") — the handoff's responsive landing
+ * Full landing mode (mode="full") — the responsive landing
  * experience (v2) as part of the embedded widget. Markup builders only; the
  * component wires state, layout switching and events.
  *
@@ -303,7 +303,7 @@ export function panelSummary(parts: {
 }
 
 /**
- * Map-panel 2a header: drag grip + selector chip + close. The header row is
+ * Map-panel header: drag grip + selector chip + close. The header row is
  * the drag handle (`data-drag-handle`).
  */
 export function draggablePanelHeaderHtml(
@@ -322,7 +322,7 @@ export function draggablePanelHeaderHtml(
     </div>`;
 }
 
-/** Analysis / last-update line below table or graph (§5.7). */
+/** Analysis / last-update line below table or graph. */
 export function metaFooterHtml(line: string): string {
   return `<div class="meta-footer">${esc(line)}</div>`;
 }

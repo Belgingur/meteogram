@@ -11,7 +11,7 @@ import { symbolUrl } from "./symbols";
 import type { HourPoint } from "./types";
 
 /**
- * The meteogram card from the handoff's Graph view: header, pinned scrub
+ * The meteogram card for the Graph view: header, pinned scrub
  * readout, horizontally scrolling lanes with the time cursor, and legend.
  * Shared by the graph-only widget, the full landing mode and the sheet.
  */

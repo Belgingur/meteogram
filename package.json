@@ -1,7 +1,7 @@
 {
   "name": "bel-meteogram",
   "version": "0.2.0",
-  "description": "Belgingur meteogram widget — mobile-first redesign (Mimir handoff). Framework-agnostic web component, embeddable inline or as a bottom sheet.",
+  "description": "Belgingur meteogram widget — a framework-agnostic web component, embeddable inline, as a docked map panel or as a bottom sheet.",
   "type": "module",
   "main": "dist/bel-meteogram.js",
   "engines": {

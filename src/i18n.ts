@@ -35,7 +35,7 @@ export interface Labels {
   language: string;
   location: string;
   search: string;
-  /** Map panel 2a */
+  /** Map panel */
   analysis: string;
   lastUpdate: string;
   next48: string;
@@ -414,7 +414,7 @@ export const LANGS: { code: string; name: string }[] = [
   { code: "pt", name: "Português" },
 ];
 
-/** Default Icelandic, per the Mimir handoff */
+/** Default Icelandic */
 export function labels(lang: string): Labels {
   return all[lang] ?? all.is;
 }
