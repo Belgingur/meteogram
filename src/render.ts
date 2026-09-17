@@ -14,9 +14,9 @@ import type { HourPoint } from "./types";
  * labels and gridlines cannot drift apart at any scroll offset.
  *
  * Two geometries, selected via the `layout` argument:
- *   LAYOUT_FULL (Mimir mobile handoff v3) — 34px/h, height 358, a horizontal
+ *   LAYOUT_FULL — 34px/h, height 358, a horizontal
  *     scrub track between the symbol row and the temp lane.
- *   LAYOUT_COMPACT (Mimir map-panel handoff 1b) — 27px/h, height 252, a
+ *   LAYOUT_COMPACT — 27px/h, height 252, a
  *     top-anchored scrubber (no track), for the docked desktop panel.
  */
 
@@ -356,7 +356,7 @@ export function temperatureTicks(temps: number[]): number[] {
 }
 
 /**
- * Wind lane domain: 0–20 m/s per the handoff; extended to the next multiple
+ * Wind lane domain: 0–20 m/s; extended to the next multiple
  * of 10 when the data exceeds it so storm-force wind still reads.
  */
 export function windMax(points: HourPoint[]): number {

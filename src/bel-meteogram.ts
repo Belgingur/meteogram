@@ -42,7 +42,7 @@ const SAMPLE_FULL_HOURS = 168;
  *  graph is rebuilt. Small enough to read as continuous, large enough that a
  *  long chart's rebuild cost lands a few times per drag rather than per pixel. */
 const REFIT_QUANTUM = 12;
-/** Map-panel 2a persisted state key (development.md §7) */
+/** localStorage key for the map panel's position and size. */
 const MAP_PANEL_STATE_KEY = "mimirMapPanelState";
 const PANEL_W = 440;
 /** At/above this rendered width the panel uses the two-column expanded layout
@@ -72,7 +72,7 @@ interface MapPanelPersisted {
   scrubUtcMs?: number;
   view?: "table" | "graph";
   panelPos?: { x: number; y: number };
-  /** User-set panel size (map-panel 2a resize grip). 0/absent → defaults. */
+  /** User-set panel size (map-panel resize grip). 0/absent → defaults. */
   panelSize?: { w: number; h: number };
 }
 
@@ -135,7 +135,7 @@ function stored(key: string): string | null {
 }
 
 /**
- * <bel-meteogram> — the Mimir mobile handoff as a self-contained widget.
+ * <bel-meteogram> — the Belgingur meteogram as a self-contained widget.
  *
  * Two modes:
  *   mode="graph" (default)  the meteogram card only, as before — for the
@@ -209,7 +209,7 @@ export class BelMeteogram extends HTMLElement {
   /** Guards setAttribute calls that must not retrigger load() */
   private suppressAttrCallback = false;
 
-  // Full-mode state (handoff "State Management")
+  // Full-mode state
   private rawForecasts: ForecastUrl[] = [];
   private rawStations: StationMetadata[] = [];
   private forecastId = "";
@@ -229,7 +229,7 @@ export class BelMeteogram extends HTMLElement {
   private scrubUtcMs: number | null = null;
   /** Desktop (two-column) layout when the viewport is ≥ 900px */
   private isWide = false;
-  /** Map-panel 2a: draggable position within the host */
+  /** Map panel: draggable position within the host */
   private panelPos = { x: -1, y: 18 };
   private resizeRaf = 0;
   /** User-set panel size (0 → use the default 440 × host-height). */
@@ -374,7 +374,7 @@ export class BelMeteogram extends HTMLElement {
     ) {
       this.panelSize = { ...persisted.panelSize };
     }
-    // Default view: Graph on the desktop docked panel (map-panel 2a), Table on
+    // Default view: Graph on the desktop docked panel, Table on
     // the mobile sheet (v2). An explicit `view` attribute always wins.
     const viewAttr = this.getAttribute("view");
     if (viewAttr === "graph" || viewAttr === "table") {
@@ -457,7 +457,7 @@ export class BelMeteogram extends HTMLElement {
    * map pin. Fired on every successful load — initial, station pick, model
    * change or a programmatic loadChartLocation() — carrying the resolved place
    * name and the "now" temperature so the host can render the pin label
-   * ("{place} · {temp}°" per the map-panel handoff).
+   * ("{place} · {temp}°").
    */
   private persistMapPanel(): void {
     if (!this.isFull || !this.usesPanel) return;
@@ -503,7 +503,7 @@ export class BelMeteogram extends HTMLElement {
   private resolvedPanelH(): number {
     const maxH = this.hostH() - 24;
     // Default tall enough to hold the full 1-column meteogram (now-card, chips,
-    // tabs, chart with wind lane, legend, meta) without clipping (task B1).
+    // tabs, chart with wind lane, legend, meta) without clipping.
     const def = Math.min(840, maxH);
     const h = this.panelSize.h > 0 ? this.panelSize.h : def;
     return Math.max(this.minPanelH(), Math.min(maxH, h));
@@ -542,7 +542,7 @@ export class BelMeteogram extends HTMLElement {
     // A host (Mímir) can pass the authoritative model run / update time from its
     // own manifest via the `analysis-time` / `last-updated` attributes (ISO,
     // UTC). Those win over values derived from the widget's own meteogram.json,
-    // which may not carry them reliably (task C2).
+    // which may not carry them reliably.
     const anaAttr = this.getAttribute("analysis-time");
     const anaDate = anaAttr ? new Date(anaAttr) : this.analysisTime;
     const updAttr = this.getAttribute("last-updated");
@@ -1003,7 +1003,7 @@ export class BelMeteogram extends HTMLElement {
     // Landscape pins the panel to fill the modal (CSS), so it carries no inline
     // size and offers no resize grip; the docked desktop panel keeps both.
     const panelStyle = landscape ? "" : this.panelStyleAttr();
-    // Two resize grips (task B2): bottom-left grows into the map on the left,
+    // Two resize grips: bottom-left grows into the map on the left,
     // bottom-right grows to the right. Both carry a visible corner bracket +
     // resize cursor; a one-time pulse (added in wireFull) hints they're draggable.
     // TODO(B2): true full-screen is intentionally out of scope for this pass —
@@ -1012,7 +1012,7 @@ export class BelMeteogram extends HTMLElement {
       ? ""
       : `<div class="panel-resize panel-resize-bl" data-resize-handle data-corner="bl" role="separator" aria-label="Resize" title="${esc(t.resize)}"></div>
          <div class="panel-resize panel-resize-br" data-resize-handle data-corner="br" role="separator" aria-label="Resize" title="${esc(t.resize)}"></div>`;
-    // Desktop (map-panel 2a): draggable panel with the panel graph. Mobile: v2 sheet.
+    // Desktop: draggable panel with the panel graph. Mobile: sheet.
     const page = wide
       ? `<div class="${cls}"${panelStyle}>
            ${draggablePanelHeaderHtml(summary, closable, t)}
@@ -1138,7 +1138,7 @@ export class BelMeteogram extends HTMLElement {
   }
 
   /**
-   * Desktop draggable panel body (map-panel 2a): compact now card, equal-width
+   * Desktop draggable panel body: compact now card, equal-width
    * day chips, Table/Graph switch, table or panel meteogram.
    */
   private desktopBodyHtml(
@@ -1253,7 +1253,7 @@ export class BelMeteogram extends HTMLElement {
       });
     }
 
-    // Map-panel 2a: drag the panel by its header. Skipped in landscape, where
+    // Map panel: drag the panel by its header. Skipped in landscape, where
     // the panel is pinned full-screen (no drag/resize).
     const dragHandle = q<HTMLElement>("[data-drag-handle]");
     const page = q<HTMLElement>(".page.wide-2a");
@@ -1306,11 +1306,11 @@ export class BelMeteogram extends HTMLElement {
         window.addEventListener("pointerup", onUp);
       });
 
-      // Map-panel 2a: resize the panel from EITHER bottom corner (task B2).
+      // Map-panel: resize the panel from EITHER bottom corner.
       //  · bottom-left  grip anchors the top-RIGHT corner → grows into the open
       //    map space on the left + downward.
       //  · bottom-right grip anchors the top-LEFT corner → grows right + down.
-      // WYSIWYG reflow (task B4): the layout reflows (1-col ⇄ 2-col at
+      // WYSIWYG reflow: the layout reflows (1-col ⇄ 2-col at
       // EXPAND_THRESHOLD) DURING the drag, the instant the width crosses the
       // breakpoint — so the released layout is exactly what the preview showed.
       // The pointer listeners live on `window` (not the grip), so a mid-drag
@@ -1398,7 +1398,7 @@ export class BelMeteogram extends HTMLElement {
         wireResizeGrip(grip, grip.dataset.corner === "br" ? "br" : "bl");
       }
       // First-ever open: pulse the grips once so users discover the panel is
-      // resizable (task B2 discoverability). Persisted so it shows only once.
+      // resizable. Persisted so it shows only once.
       if (grips.length && !stored("resizeHintSeen")) {
         grips.forEach((g) => g.classList.add("hint"));
         store("resizeHintSeen", "1");

@@ -11,7 +11,7 @@ modes:
    Graph tab) or as a popup / bottom sheet via `BelMeteogram.openSheet()`.
 2. **`mode="full"`** — the whole landing experience for embedding on other
    sites: **responsive** with a JS breakpoint at 900 px.
-   - **Below 900 px — mobile sheet (responsive v2):** location block,
+   - **Below 900 px — mobile sheet:** location block,
      settings pill + **settings overlay**, "weather now" card, **Table/Graph
      segmented control**, a horizontally-scrolling **day-chip row** and one
      fixed selected-day card.
@@ -52,7 +52,7 @@ into **one JS file** (~50 kB gzipped).
     bar in front (16 px, `#3D82C4`); axis labels derived from how far the
     bars can actually reach before the cap (1 and 2 mm at this scale).
   - **Vindur** lane (y 246–306): gust line dashed `#7FB394` behind, wind
-    line solid `#3E8E63` on top; 0–20 m/s per the handoff, domain extended
+    line solid `#3E8E63` on top; 0–20 m/s, domain extended
     to the next multiple of 10 when data exceeds it; a direction arrow per
     timestep (rotated to *direction + 180°*).
   - Hour labels every 3 h (y 350).
@@ -77,7 +77,7 @@ into **one JS file** (~50 kB gzipped).
   below; model chips, IS/EN pills (apply instantly, overlay stays open),
   live-filtered station list with a checkmark on the current place.
   Model + language choices persist in `localStorage`.
-- Nunito typography (loaded once at document level), handoff color tokens
+- Nunito typography (loaded once at document level), shared color tokens
   throughout; loading skeletons and an error state with retry.
 - Forecasts with 3 h / 6 h timesteps are handled: the "Næstu N klst." title
   is computed from the real timestep rather than from a column count.
@@ -87,7 +87,7 @@ into **one JS file** (~50 kB gzipped).
   same span. Graph mode keeps its `hours` window, so a card embed still
   downloads two days rather than two weeks.
 
-Deviation from the handoff: station rows and the location subtitle show
+Station rows and the location subtitle show
 coordinates instead of elevation — the WOD forecast metadata does not
 provide station elevations. Geolocation is also left to the host page
 (embeds pass `location-lat`/`location-lon`).
@@ -169,7 +169,7 @@ the dismissal.
 fires on the initial load and again whenever the point changes (a station is
 picked in the settings overlay, the forecast model changes, or the host calls
 `loadChartLocation()`), so a map host can drop/move its selected-point pin and
-label it `{name} · {tempC}°` per the map-panel handoff. The event bubbles and is
+label it `{name} · {tempC}°`. The event bubbles and is
 `composed`, so hosts can listen on the element or on an ancestor/document:
 
 ```js
@@ -250,7 +250,7 @@ src/
   bel-meteogram.ts   component (graph + full modes), bottom-sheet element
   api.ts             WOD widget API client (config → forecast → meteogram.json)
   transform.ts       meteogram.json → per-hour points (timezone shift, precip scaling)
-  render.ts          SVG renderer implementing the handoff geometry + scrubber
+  render.ts          SVG chart renderer + scrubber
   layout.ts          chart geometry: band spec → y-coordinates, fit scaling
   map-panel-graph.ts the docked/expanded panel's chart      
   graph-card.ts      graph card: readout, lane chips, legend, scrub wiring
@@ -259,7 +259,7 @@ src/
   symbols.ts         symbol code → inlined SVG asset (see Licence below)
   i18n.ts            is/en strings
   types.ts           API response + hour-point shapes
-  styles.ts          card + landing + sheet CSS (handoff design tokens)
+  styles.ts          card + landing + sheet CSS (design tokens)
   sample.ts          generated sample data for dev/design review
   assets/symbols/    Yr weather symbols, CC BY 4.0 (see Licence below)
 ```
