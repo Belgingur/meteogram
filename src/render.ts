@@ -1,3 +1,4 @@
+import { DATA_COLORS } from "./colors";
 import { symbolUrl } from "./symbols";
 import type { Labels } from "./i18n";
 import type { HourPoint } from "./types";
@@ -162,9 +163,14 @@ export function hasGustSeries(points: HourPoint[]): boolean {
   return points.some((p) => p.gustMs !== null);
 }
 
-// Temperature color rule: > 0 °C red, < 0 °C blue, exactly 0 °C neutral
+// Temperature color rule: > 0 °C red, < 0 °C blue, exactly 0 °C neutral.
+// The hues come from DATA_COLORS so this table agrees with both charts.
 export function tempColor(t: number): string {
-  return t > 0 ? "#D14B4B" : t < 0 ? "#2E6FB2" : "#6B7A86";
+  return t > 0
+    ? DATA_COLORS.temp
+    : t < 0
+      ? DATA_COLORS.tempCold
+      : DATA_COLORS.neutral;
 }
 
 export function esc(s: string): string {
@@ -218,8 +224,8 @@ function linePath(
    only the tick values and their text come from here. */
 
 /** Tick label colours */
-export const TICK_COLOR = "#94A2AC";
-export const PRECIP_TICK_COLOR = "#3D82C4";
+export const TICK_COLOR = DATA_COLORS.none;
+export const PRECIP_TICK_COLOR = DATA_COLORS.precip;
 
 /** Precipitation tick + gridline values, in mm */
 export const PRECIP_TICKS: readonly number[] = [1, 2];
@@ -565,7 +571,7 @@ export function buildMeteogram(
     if (pm > 0) {
       const h = ph(pm);
       parts.push(
-        `<rect x="${cx(i) - L.precipMaxW / 2}" y="${L.precipBase - h}" width="${L.precipMaxW}" height="${h}" rx="2" fill="#A8CBEA"/>`,
+        `<rect x="${cx(i) - L.precipMaxW / 2}" y="${L.precipBase - h}" width="${L.precipMaxW}" height="${h}" rx="2" fill="${DATA_COLORS.precipMax}"/>`,
       );
     }
   }
@@ -574,14 +580,14 @@ export function buildMeteogram(
     if (mm > 0) {
       const h = ph(mm);
       parts.push(
-        `<rect x="${cx(i) - L.precipW / 2}" y="${L.precipBase - h}" width="${L.precipW}" height="${h}" rx="2" fill="#3D82C4"/>`,
+        `<rect x="${cx(i) - L.precipW / 2}" y="${L.precipBase - h}" width="${L.precipW}" height="${h}" rx="2" fill="${DATA_COLORS.precip}"/>`,
       );
     }
   }
 
   // Hiti lane: temperature polyline
   parts.push(
-    `<path d="${linePath(points, (p) => p.tempC, cx, ty)}" fill="none" stroke="#D14B4B" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>`,
+    `<path d="${linePath(points, (p) => p.tempC, cx, ty)}" fill="none" stroke="${DATA_COLORS.temp}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>`,
   );
 
   // Weather symbols on every timestep, centered per column
@@ -599,14 +605,14 @@ export function buildMeteogram(
   parts.push(dividerLines(L, width));
 
   // Vindur lane: gust line first (dashed), wind line on top. The gust line is
-  // omitted entirely when the dataset has no gust series (task A2).
+  // omitted entirely when the dataset has no gust series.
   if (hasGust) {
     parts.push(
-      `<path d="${linePath(points, (p) => p.gustMs, cx, wy)}" fill="none" stroke="#7FB394" stroke-width="1.8" stroke-dasharray="4 4" stroke-linecap="round" stroke-linejoin="round"/>`,
+      `<path d="${linePath(points, (p) => p.gustMs, cx, wy)}" fill="none" stroke="${DATA_COLORS.gust}" stroke-width="1.8" stroke-dasharray="4 4" stroke-linecap="round" stroke-linejoin="round"/>`,
     );
   }
   parts.push(
-    `<path d="${linePath(points, (p) => p.windMs, cx, wy)}" fill="none" stroke="#3E8E63" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>`,
+    `<path d="${linePath(points, (p) => p.windMs, cx, wy)}" fill="none" stroke="${DATA_COLORS.wind}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>`,
   );
 
   // Temperature value labels on every timestep, temp-colored. Placement (above
@@ -643,7 +649,7 @@ export function buildMeteogram(
   // Hour ticks every 3 h
   for (let i = 0; i < n; i += 3) {
     const hh = String(points[i].local.getUTCHours()).padStart(2, "0");
-    parts.push(text(cx(i), L.hourLabelY, hh, "#94A2AC", L.hourFont, 700, "middle"));
+    parts.push(text(cx(i), L.hourLabelY, hh, DATA_COLORS.none, L.hourFont, 700, "middle"));
   }
 
   // Scrubber (time cursor), drawn above the data: optional horizontal track,
@@ -659,8 +665,8 @@ export function buildMeteogram(
   }
   parts.push(
     `<line class="scrub-cursor" x1="${sx}" x2="${sx}" y1="${L.scrubTop}" y2="${L.scrubBottom}" stroke="#14202B" stroke-width="1.2" stroke-dasharray="2 3" opacity="0.5"/>`,
-    `<circle class="scrub-dot-temp" cx="${sx}" cy="${sTemp === null ? 0 : ty(sTemp)}" r="${L.dotTempR}" fill="#D14B4B" stroke="#ffffff" stroke-width="1.5"${sTemp === null ? ' visibility="hidden"' : ""}/>`,
-    `<circle class="scrub-dot-wind" cx="${sx}" cy="${sWind === null ? 0 : wy(sWind)}" r="${L.dotWindR}" fill="#3E8E63" stroke="#ffffff" stroke-width="1.5"${sWind === null ? ' visibility="hidden"' : ""}/>`,
+    `<circle class="scrub-dot-temp" cx="${sx}" cy="${sTemp === null ? 0 : ty(sTemp)}" r="${L.dotTempR}" fill="${DATA_COLORS.temp}" stroke="#ffffff" stroke-width="1.5"${sTemp === null ? ' visibility="hidden"' : ""}/>`,
+    `<circle class="scrub-dot-wind" cx="${sx}" cy="${sWind === null ? 0 : wy(sWind)}" r="${L.dotWindR}" fill="${DATA_COLORS.wind}" stroke="#ffffff" stroke-width="1.5"${sWind === null ? ' visibility="hidden"' : ""}/>`,
     `<circle class="scrub-handle" cx="${sx}" cy="${L.scrubTop}" r="${L.handleR}" fill="#14202B" stroke="#ffffff" stroke-width="2"/>`,
     // Invisible touch strip around the track: drags here scrub; touches
     // elsewhere on the chart scroll it horizontally as normal.
