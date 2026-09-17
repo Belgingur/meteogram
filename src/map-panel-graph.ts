@@ -494,7 +494,11 @@ function buildPlotSvg(
   }
   for (let k = 0; k < dayStarts.length; k++) {
     const i = dayStarts[k];
-    const x = i * L.colW;
+    // Midnight is the 00:00 sample itself, so the divider belongs on that
+    // column's CENTRE — where the hour label, the temperature point and every
+    // other mark for that hour already sit. Anchoring it to the column's left
+    // edge put the boundary half an hour early and read as a rendering fault.
+    const x = cx(i);
     // Solid day divider (skip index 0 — that's the plot's own left edge).
     if (i > 0) {
       parts.push(
@@ -652,13 +656,16 @@ function buildPlotSvg(
   const anaX = cx(Math.max(0, Math.min(n - 1, anaIdx)));
   const nowX = cx(Math.max(0, Math.min(n - 1, nowIdx)));
   const nowTemp = points[nowIdx]?.tempC ?? null;
+  // "Now" is the line a reader looks for, so it carries the accent; the analysis
+  // time is context (and usually the chart's own left edge, since a run starts
+  // there), so it stays a quiet dashed hairline.
   parts.push(
-    `<line class="chart-ana" x1="${anaX}" x2="${anaX}" y1="${L.plotTop}" y2="${L.plotBottom}" stroke="#F0A32F" stroke-width="2"/>`,
-    `<line class="chart-now" x1="${nowX}" x2="${nowX}" y1="${L.plotTop}" y2="${L.plotBottom}" stroke="#6B7A86" stroke-width="1.2" stroke-dasharray="4 3"/>`,
+    `<line class="chart-ana" x1="${anaX}" x2="${anaX}" y1="${L.plotTop}" y2="${L.plotBottom}" stroke="#6B7A86" stroke-width="1.2" stroke-dasharray="4 3"/>`,
+    `<line class="chart-now" x1="${nowX}" x2="${nowX}" y1="${L.plotTop}" y2="${L.plotBottom}" stroke="#F0A32F" stroke-width="2"/>`,
   );
   if (nowTemp !== null) {
     parts.push(
-      `<circle class="chart-now-dot" cx="${nowX}" cy="${ty(nowTemp)}" r="4.5" fill="#C81D25" stroke="#fff" stroke-width="1.5"/>`,
+      `<circle class="chart-now-dot" cx="${nowX}" cy="${ty(nowTemp)}" r="4.5" fill="${DATA_COLORS.temp}" stroke="#fff" stroke-width="1.5"/>`,
     );
   }
 
