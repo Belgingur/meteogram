@@ -338,11 +338,23 @@ export function formatPrecipTick(mm: number): string {
   return `${mm}`;
 }
 
-/** Nice gridline values (integer °C steps) covering the temperature range */
+/**
+ * Nice gridline values (integer °C steps) covering the temperature range.
+ *
+ * Guards the range rather than trusting the caller's filter. A single
+ * non-finite reading makes `min`/`max` NaN, and every arithmetic step after
+ * that stays NaN: `Math.floor(NaN / step)` is NaN, the tick loop's `v <= hi`
+ * is false on the first test, and the function returns an EMPTY array. Its
+ * caller then reads `ticks[0]` as the domain's low edge, gets `undefined`, and
+ * every y-coordinate on the chart — including the ones with real data behind
+ * them — comes out NaN. That is how one ragged API response erased the whole
+ * temperature line, so the fallback ladder covers a non-finite range too.
+ */
 export function temperatureTicks(temps: number[]): number[] {
-  if (!temps.length) return [0, 2, 4, 6, 8];
-  const min = Math.min(...temps);
-  const max = Math.max(...temps);
+  const finite = temps.filter((v) => Number.isFinite(v));
+  if (!finite.length) return [0, 2, 4, 6, 8];
+  const min = Math.min(...finite);
+  const max = Math.max(...finite);
   const steps = [1, 2, 5, 10, 20, 50];
   const step =
     steps.find((s) => Math.ceil(max / s) * s - Math.floor(min / s) * s <= s * 5) ??
@@ -391,9 +403,12 @@ function meteogramScales(
   points: HourPoint[],
   L: MeteogramLayout,
 ): MeteogramScales {
+  // `Number.isFinite`, not `!== null`: the type says a reading is `number |
+  // null`, but a short API series hands back `undefined` past its end, and
+  // that slips through a null check straight into the scale arithmetic.
   const temps = points
     .map((p) => p.tempC)
-    .filter((v): v is number => v !== null);
+    .filter((v): v is number => Number.isFinite(v));
   const tempTicks = temperatureTicks(temps);
   const [lo, hi] = [tempTicks[0], tempTicks[tempTicks.length - 1]];
   const wMax = windMax(points);

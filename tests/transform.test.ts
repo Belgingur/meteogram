@@ -166,3 +166,59 @@ describe("toHourPoints — pass-through and symbol integration", () => {
     expect(p[0].symbol).toBe("");
   });
 });
+
+// A real ICON-EU response carried 121 timestamps and 93 values in every data
+// array. Reading past the end of those arrays yielded `undefined`,
+// which is neither a number nor the `null` the consumers check for: one of them
+// reaching `Math.min` made the temperature domain NaN and erased the whole line,
+// while the 28 valueless columns drew as an empty stretch of chart.
+describe("toHourPoints — a response with more timestamps than values", () => {
+  it("stops at the last timestep the data actually covers", () => {
+    const api = makeApi(
+      {
+        air_temperature_at_2m_agl: [1, 2, 3],
+        wind_speed_at_10m_agl: [4, 5, 6],
+      },
+      { steps: 10 },
+    );
+    expect(toHourPoints(api, 48)).toHaveLength(3);
+  });
+
+  it("never emits a non-finite reading", () => {
+    const api = makeApi(
+      { air_temperature_at_2m_agl: [1, 2, 3], lwe_precipitation_rate: [0.5] },
+      { steps: 10 },
+    );
+    const points = toHourPoints(api, 48);
+    // The shortest present series is what the chart can honestly draw.
+    expect(points).toHaveLength(1);
+    for (const p of points) {
+      expect(p.tempC === null || Number.isFinite(p.tempC)).toBe(true);
+      expect(Number.isFinite(p.precipMm)).toBe(true);
+      expect(Number.isFinite(p.precipMaxMm)).toBe(true);
+      expect(p.windMs === null || Number.isFinite(p.windMs)).toBe(true);
+      expect(p.dirDeg === null || Number.isFinite(p.dirDeg)).toBe(true);
+    }
+  });
+
+  it("treats a missing precipitation value as no rain, not as NaN", () => {
+    const api = makeApi(
+      { air_temperature_at_2m_agl: [1, 2, 3], lwe_precipitation_rate: [] },
+      { steps: 3 },
+    );
+    const points = toHourPoints(api, 48);
+    expect(points).toHaveLength(3);
+    expect(points.map((p) => p.precipMm)).toEqual([0, 0, 0]);
+  });
+
+  it("ignores an empty series rather than truncating the run to nothing", () => {
+    const api = makeApi(
+      {
+        air_temperature_at_2m_agl: [1, 2, 3],
+        wind_speed_of_gust_at_10m_agl: [],
+      },
+      { steps: 3 },
+    );
+    expect(toHourPoints(api, 48)).toHaveLength(3);
+  });
+});
