@@ -630,7 +630,10 @@ export function buildMeteogram(
   for (let k = 0; k < dayStarts.length; k++) {
     const i = dayStarts[k];
     if (i > 0) {
-      const x = L.padL + i * L.colW;
+      // On the 00:00 column's centre, with the rest of that hour's marks: the
+      // hour label, the readings, the bars. The column's left EDGE — where this
+      // sat — is half an hour early, and reads as a misplaced line.
+      const x = cx(i);
       parts.push(
         `<line x1="${x}" x2="${x}" y1="${L.dayTop}" y2="${L.dayBottom}" stroke="#DCE3E8" stroke-width="1" stroke-dasharray="3 3"/>`,
       );
