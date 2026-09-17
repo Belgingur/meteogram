@@ -85,10 +85,10 @@ export function groupDays(
           : wd.charAt(0).toUpperCase() + wd.slice(1);
     const temps = hours
       .map((p) => p.tempC)
-      .filter((v): v is number => v !== null);
+      .filter((v): v is number => Number.isFinite(v));
     const winds = hours
       .map((p) => p.windMs)
-      .filter((v): v is number => v !== null);
+      .filter((v): v is number => Number.isFinite(v));
     groups.push({
       name,
       date: t.dateLabel(d.getUTCDate(), t.months[d.getUTCMonth()]),

@@ -138,3 +138,17 @@ describe("buildMeteogram — emitted temperature labels", () => {
     expect(svg).toContain('paint-order="stroke"');
   });
 });
+
+describe("temperatureTicks — a non-finite range never collapses the scale", () => {
+  it("falls back to the default ladder when every reading is non-finite", () => {
+    expect(temperatureTicks([NaN, NaN])).toEqual([0, 2, 4, 6, 8]);
+  });
+
+  it("ignores a stray NaN instead of returning no ticks at all", () => {
+    const ticks = temperatureTicks([2, NaN, 8]);
+    expect(ticks.length).toBeGreaterThan(1);
+    expect(ticks.every((t) => Number.isFinite(t))).toBe(true);
+    expect(ticks[0]).toBeLessThanOrEqual(2);
+    expect(ticks.at(-1)).toBeGreaterThanOrEqual(8);
+  });
+});
