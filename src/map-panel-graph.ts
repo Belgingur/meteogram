@@ -1,3 +1,4 @@
+import { DATA_COLORS } from "./colors";
 import type { Labels } from "./i18n";
 import {
   arrowSvg,
@@ -37,9 +38,13 @@ import {
 import { symbolUrl } from "./symbols";
 import type { HourPoint } from "./types";
 
-/** Map-panel 2a temperature colour (§6) */
+/** Map-panel temperature colour. */
 export function tempColorPanel(t: number): string {
-  return t > 0 ? "#C81D25" : t < 0 ? "#2E6FB2" : "#6B7A86";
+  return t > 0
+    ? DATA_COLORS.temp
+    : t < 0
+      ? DATA_COLORS.tempCold
+      : DATA_COLORS.neutral;
 }
 
 interface ChartLayout {
@@ -518,7 +523,7 @@ function buildPlotSvg(
     if (pm > 0) {
       const h = ph(pm);
       parts.push(
-        `<rect x="${cx(i) - L.precipMaxW / 2}" y="${L.precipBase - h}" width="${L.precipMaxW}" height="${h}" rx="1.5" fill="#B9D6EF"/>`,
+        `<rect x="${cx(i) - L.precipMaxW / 2}" y="${L.precipBase - h}" width="${L.precipMaxW}" height="${h}" rx="1.5" fill="${DATA_COLORS.precipMax}"/>`,
       );
     }
   }
@@ -527,7 +532,7 @@ function buildPlotSvg(
     if (mm > 0) {
       const h = ph(mm);
       parts.push(
-        `<rect x="${cx(i) - L.precipW / 2}" y="${L.precipBase - h}" width="${L.precipW}" height="${h}" rx="1.5" fill="#3D82C4"/>`,
+        `<rect x="${cx(i) - L.precipW / 2}" y="${L.precipBase - h}" width="${L.precipW}" height="${h}" rx="1.5" fill="${DATA_COLORS.precip}"/>`,
       );
     }
   }
@@ -548,17 +553,17 @@ function buildPlotSvg(
   }
 
   parts.push(
-    `<path d="${linePath(points, (p) => p.tempC, cx, ty)}" fill="none" stroke="#C81D25" stroke-width="${L.tempStroke}" stroke-linecap="round" stroke-linejoin="round"/>`,
+    `<path d="${linePath(points, (p) => p.tempC, cx, ty)}" fill="none" stroke="${DATA_COLORS.temp}" stroke-width="${L.tempStroke}" stroke-linecap="round" stroke-linejoin="round"/>`,
   );
   // Dashed gust line, drawn under the wind line — omitted when the dataset has
-  // no gust series (task A2).
+  // no gust series.
   if (hasGustSeries(points)) {
     parts.push(
-      `<path d="${linePath(points, (p) => p.gustMs, cx, wy)}" fill="none" stroke="#7FB394" stroke-width="1.6" stroke-dasharray="4 4" stroke-linecap="round" stroke-linejoin="round"/>`,
+      `<path d="${linePath(points, (p) => p.gustMs, cx, wy)}" fill="none" stroke="${DATA_COLORS.gust}" stroke-width="1.6" stroke-dasharray="4 4" stroke-linecap="round" stroke-linejoin="round"/>`,
     );
   }
   parts.push(
-    `<path d="${linePath(points, (p) => p.windMs, cx, wy)}" fill="none" stroke="#3E8E63" stroke-width="${L.windStroke}" stroke-linecap="round" stroke-linejoin="round"/>`,
+    `<path d="${linePath(points, (p) => p.windMs, cx, wy)}" fill="none" stroke="${DATA_COLORS.wind}" stroke-width="${L.windStroke}" stroke-linecap="round" stroke-linejoin="round"/>`,
   );
 
   // Tip-down glyph (points south at rotate(0)), so the meteorological
@@ -638,8 +643,8 @@ function buildPlotSvg(
   const sWind = points[si]?.windMs ?? null;
   parts.push(
     `<line class="scrub-cursor" x1="${sx}" x2="${sx}" y1="${L.plotTop}" y2="${L.plotBottom}" stroke="#14202B" stroke-width="1.2" stroke-dasharray="2 3" opacity="0.55"/>`,
-    `<circle class="scrub-dot-temp" cx="${sx}" cy="${sTemp === null ? 0 : ty(sTemp)}" r="4" fill="#C81D25" stroke="#fff" stroke-width="1.5"${sTemp === null ? ' visibility="hidden"' : ""}/>`,
-    `<circle class="scrub-dot-wind" cx="${sx}" cy="${sWind === null ? 0 : wy(sWind)}" r="4" fill="#3E8E63" stroke="#fff" stroke-width="1.5"${sWind === null ? ' visibility="hidden"' : ""}/>`,
+    `<circle class="scrub-dot-temp" cx="${sx}" cy="${sTemp === null ? 0 : ty(sTemp)}" r="4" fill="${DATA_COLORS.temp}" stroke="#fff" stroke-width="1.5"${sTemp === null ? ' visibility="hidden"' : ""}/>`,
+    `<circle class="scrub-dot-wind" cx="${sx}" cy="${sWind === null ? 0 : wy(sWind)}" r="4" fill="${DATA_COLORS.wind}" stroke="#fff" stroke-width="1.5"${sWind === null ? ' visibility="hidden"' : ""}/>`,
   );
 
   const svg = `<svg class="chart-plot" width="${width}" height="${L.height}" viewBox="0 0 ${width} ${L.height}" style="display:block;touch-action:none;cursor:crosshair" role="img">${parts.join("")}</svg>`;

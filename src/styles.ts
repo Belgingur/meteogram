@@ -5,9 +5,12 @@
  *        bel-meteogram.ts.
  * Color: tokens below — basalt ink, glacier frost surface, muted slate haze,
  *        hairline, and a single deep aurora-teal accent used only on selected /
- *        focus / wind. Data-encoding colors (temp #C81D25, precip #3D82C4,
- *        wind green) are intentionally NOT tokenised — they stay put.
+ *        focus / wind. Data-encoding colors (temperature, precipitation, wind)
+ *        come from DATA_COLORS, the one palette the SVG charts read too — the
+ *        same reading must not change colour between the phone and the panel.
  */
+import { DATA_COLORS } from "./colors";
+
 export const componentStyles = `
 :host {
   --ink: #14202B;
@@ -112,7 +115,7 @@ input:focus-visible,
   font-variant-numeric: tabular-nums;
 }
 .ro-temp { font-size: 19px; font-weight: 900; }
-.ro-precip { font-size: 13px; font-weight: 800; color: #3D82C4; }
+.ro-precip { font-size: 13px; font-weight: 800; color: ${DATA_COLORS.precip}; }
 .ro-wind {
   display: flex;
   align-items: center;
@@ -145,9 +148,9 @@ input:focus-visible,
   font-weight: 800;
   color: var(--haze);
 }
-.chip-swatch-temp { width: 10px; height: 2.5px; background: #D14B4B; border-radius: 2px; }
-.chip-swatch-precip { width: 7px; height: 9px; background: #3D82C4; border-radius: 2px; }
-.chip-swatch-wind { width: 10px; height: 2.5px; background: #3E8E63; border-radius: 2px; }
+.chip-swatch-temp { width: 10px; height: 2.5px; background: ${DATA_COLORS.temp}; border-radius: 2px; }
+.chip-swatch-precip { width: 7px; height: 9px; background: ${DATA_COLORS.precip}; border-radius: 2px; }
+.chip-swatch-wind { width: 10px; height: 2.5px; background: ${DATA_COLORS.wind}; border-radius: 2px; }
 
 .legend {
   display: flex;
@@ -159,11 +162,11 @@ input:focus-visible,
   color: var(--haze);
 }
 .legend span { display: flex; align-items: center; gap: 5px; }
-.swatch-temp { width: 14px; height: 2.5px; background: #D14B4B; border-radius: 2px; }
-.swatch-precip { width: 8px; height: 10px; background: #3D82C4; border-radius: 2px; }
-.swatch-pmax { width: 8px; height: 10px; background: #A8CBEA; border-radius: 2px; }
-.swatch-wind { width: 14px; height: 2.5px; background: #3E8E63; border-radius: 2px; }
-.swatch-gust { width: 14px; height: 0; border-top: 2.5px dashed #7FB394; }
+.swatch-temp { width: 14px; height: 2.5px; background: ${DATA_COLORS.temp}; border-radius: 2px; }
+.swatch-precip { width: 8px; height: 10px; background: ${DATA_COLORS.precip}; border-radius: 2px; }
+.swatch-pmax { width: 8px; height: 10px; background: ${DATA_COLORS.precipMax}; border-radius: 2px; }
+.swatch-wind { width: 14px; height: 2.5px; background: ${DATA_COLORS.wind}; border-radius: 2px; }
+.swatch-gust { width: 14px; height: 0; border-top: 2.5px dashed ${DATA_COLORS.gust}; }
 
 /* Loading skeleton (graph-only mode) */
 .skeleton {
@@ -824,8 +827,8 @@ input:focus-visible,
 }
 .chart-scroll svg text { pointer-events: none; }
 .chart-lane .chart-chip { font-size: 10px; padding: 2px 7px; border-radius: 7px; }
-.chart-swatch-temp { background: #C81D25 !important; }
-.chart-swatch-pmax { background: #B9D6EF !important; }
+/* The .chart-swatch-* overrides that used to re-colour the panel's legend are
+   gone: both charts now draw from DATA_COLORS, so there is nothing to override. */
 .chart-legend { flex: none; gap: 5px 11px; padding: 6px 16px 14px; font-size: 10px; }
 
 /* ── Time scrubber — subtle dot on the chart's top edge ──────────────────
@@ -963,7 +966,7 @@ input:focus-visible,
 .h-time { font-weight: 800; color: var(--ink); }
 .h-icon { display: flex; }
 .h-temp { text-align: right; font-weight: 900; }
-.h-precip { text-align: right; font-weight: 700; color: #3D82C4; }
+.h-precip { text-align: right; font-weight: 700; color: ${DATA_COLORS.precip}; }
 .h-wind {
   display: flex;
   align-items: center;

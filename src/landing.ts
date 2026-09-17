@@ -1,3 +1,4 @@
+import { DATA_COLORS } from "./colors";
 import { arrowSvg, windText } from "./graph-card";
 import { LANGS, type Labels } from "./i18n";
 import { esc, tempColor } from "./render";
@@ -146,17 +147,17 @@ export function nowCardHtml(
     <div class="now">
       <div class="now-eyebrow">${esc(t.now)}</div>
       <div class="now-main">
-        <div class="now-temp" style="font-size:${heroSize}px;color:${temp === null ? "#94A2AC" : "#14202B"}">${temp === null ? "–" : `${temp}°`}</div>
+        <div class="now-temp" style="font-size:${heroSize}px;color:${temp === null ? DATA_COLORS.none : "#14202B"}">${temp === null ? "–" : `${temp}°`}</div>
         <div class="now-icon">${symbolImg(p.symbol, iconSize)}</div>
       </div>
       <div class="now-stats">
         <div class="stat">
           <div class="stat-label">${esc(t.feels)}</div>
-          <div class="stat-value" style="color:${feels === null ? "#94A2AC" : "#14202B"}">${feels === null ? "–" : `${feels}°`}</div>
+          <div class="stat-value" style="color:${feels === null ? DATA_COLORS.none : "#14202B"}">${feels === null ? "–" : `${feels}°`}</div>
         </div>
         <div class="stat">
           <div class="stat-label">${esc(t.precip)}</div>
-          <div class="stat-value" style="color:#2E6FB2">${p.precipMm.toFixed(1)} mm</div>
+          <div class="stat-value" style="color:${DATA_COLORS.precip}">${p.precipMm.toFixed(1)} mm</div>
         </div>
         <div class="stat stat--wind-card">
           <div class="stat-label">${esc(t.wind)}</div>
@@ -189,7 +190,7 @@ function hourCells(p: HourPoint, iconSize: number): string {
   return (
     `<span class="h-time">${String(p.local.getUTCHours()).padStart(2, "0")}</span>` +
     `<span class="h-icon">${symbolImg(p.symbol, iconSize)}</span>` +
-    `<span class="h-temp" style="color:${p.tempC === null ? "#94A2AC" : tempColor(Math.round(p.tempC))}">${p.tempC === null ? "–" : `${Math.round(p.tempC)}°`}</span>` +
+    `<span class="h-temp" style="color:${p.tempC === null ? DATA_COLORS.none : tempColor(Math.round(p.tempC))}">${p.tempC === null ? "–" : `${Math.round(p.tempC)}°`}</span>` +
     `<span class="h-precip">${p.precipMm > 0.05 ? p.precipMm.toFixed(1) : "–"}</span>` +
     `<span class="h-wind">${esc(windText(p))} ${arrowSvg(p.dirDeg, 14, "#6B7A86")}</span>`
   );
