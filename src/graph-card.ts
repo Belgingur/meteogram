@@ -67,6 +67,32 @@ export function timestepHours(points: HourPoint[]): number {
 }
 
 /**
+ * Headline for the run a chart is showing: "5 days · to Tue 16 Sep".
+ *
+ * Measured from the first timestamp to the last, so it describes the forecast
+ * the reader can actually scroll through. The old headline counted points and
+ * called the total "next N hours", which was wrong three ways at once: a
+ * 121-point hourly run reported 121 hours for 120 hours of data; a 3-hourly run
+ * reported its point count as hours; and "next" claimed the series starts now
+ * when it starts at the analysis time, an hour or several in the past.
+ */
+export function forecastSpanLabel(points: HourPoint[], t: Labels): string {
+  if (points.length < 2) return "";
+  const last = points[points.length - 1];
+  const spanH = (last.utcMs - points[0].utcMs) / 3_600_000;
+  // Intervals, not points — and at least a day, so a short run still reads as
+  // a duration rather than as "0 days".
+  const days = Math.max(1, Math.round(spanH / 24));
+  const d = last.local;
+  const wd = t.weekdays[d.getUTCDay()];
+  const cap = wd.charAt(0).toUpperCase() + wd.slice(1);
+  return t.forecastSpan(
+    days,
+    t.dayLabel(cap, d.getUTCDate(), t.months[d.getUTCMonth()]),
+  );
+}
+
+/**
  * How much already-elapsed forecast the card opens with, in columns, when it
  * anchors the cursor. Enough to show that the past is there (and that it can be
  * scrolled back to); little enough that the visible width is forecast.
@@ -162,7 +188,7 @@ export function renderGraphCard(
     opts.bare || opts.compact
       ? ""
       : `<div class="head">
-        <div class="title">${esc(t.nextHours(points.length * timestepHours(points)))}</div>
+        <div class="title">${esc(forecastSpanLabel(points, t) || t.nextHours(points.length * timestepHours(points)))}</div>
         <div class="hint">${esc(t.swipe)}</div>
       </div>`;
   const wrapClass = opts.compact
