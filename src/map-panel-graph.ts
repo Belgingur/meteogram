@@ -20,6 +20,7 @@ import {
   TICK_COLOR,
   TICK_LABEL_DY,
   windTicksFor,
+  wireTapToScrub,
 } from "./render";
 import {
   CHART_FIT_SELECTORS,
@@ -1119,6 +1120,18 @@ export function renderMapPanelGraph(
     // instead, so a touch drag reaches the .chart-scroll container — override it to
     // pan-x. Without this the graph is stuck even though it overflows.
     plot.style.touchAction = "pan-x";
+    // The plot pans here rather than scrubbing, so the only way to read an hour
+    // was the rail at the very top. A tap is separable from a pan by distance,
+    // so touching a column picks it without costing the pan anything.
+    wireTapToScrub(plot, (e) => {
+      const rect = plot.getBoundingClientRect();
+      const scale = scaleFn() || 1;
+      const i = geo.indexAt((e.clientX - rect.left) / scale);
+      if (i === idx) return;
+      idx = i;
+      update();
+      opts.onScrub(i);
+    });
   }
   if (rail) {
     // The rail is a second input into the same scrub state as the plot — it

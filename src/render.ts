@@ -108,7 +108,10 @@ export const LAYOUT_FULL: MeteogramLayout = {
   scrubBottom: 336,
   hasTrack: true,
   hitY: 24,
-  hitH: 30,
+  // 44px is the platform floor for a touch target; the old 30 was below it, and
+  // this strip is the continuous-drag scrub surface. (A tap anywhere on the plot
+  // also works now — see wireTapToScrub.)
+  hitH: 44,
   handleR: 5.5,
   dotTempR: 4.5,
   dotWindR: 4,
@@ -150,7 +153,7 @@ export const LAYOUT_COMPACT: MeteogramLayout = {
   scrubBottom: 238,
   hasTrack: false,
   hitY: 6,
-  hitH: 26,
+  hitH: 34,
   handleR: 5,
   dotTempR: 4,
   dotWindR: 3.6,
@@ -342,6 +345,47 @@ export function formatWindTick(v: number): string {
 }
 export function formatPrecipTick(mm: number): string {
   return `${mm}`;
+}
+
+/** How far a touch may travel and still count as a tap rather than a pan. */
+const TAP_SLOP_PX = 10;
+/** How long a touch may rest and still count as a tap rather than a hold. */
+const TAP_MAX_MS = 500;
+
+/**
+ * Treat a tap on the plot as "scrub to this hour", while leaving drags to pan.
+ *
+ * The chart scrolls horizontally, so the plot itself cannot be a scrub surface —
+ * every drag would hijack the pan. That is why scrubbing was confined to a
+ * narrow strip along the top, which readers could not find and which is an
+ * unkind target for a large finger or poor eyesight. A tap is distinguishable
+ * from a pan by how far the pointer travelled, so both gestures can share the
+ * same surface: drag to move through the forecast, tap to read one hour.
+ *
+ * Mouse pointers are left alone — they already scrub on hover.
+ */
+export function wireTapToScrub(
+  el: Element,
+  scrubFrom: (e: PointerEvent) => void,
+): void {
+  let start: { x: number; y: number; at: number } | null = null;
+  el.addEventListener("pointerdown", (event) => {
+    const e = event as PointerEvent;
+    if (e.pointerType === "mouse") return;
+    start = { x: e.clientX, y: e.clientY, at: Date.now() };
+  });
+  el.addEventListener("pointercancel", () => {
+    start = null;
+  });
+  el.addEventListener("pointerup", (event) => {
+    const e = event as PointerEvent;
+    const from = start;
+    start = null;
+    if (!from || e.pointerType === "mouse") return;
+    const moved = Math.hypot(e.clientX - from.x, e.clientY - from.y);
+    if (moved > TAP_SLOP_PX || Date.now() - from.at > TAP_MAX_MS) return;
+    scrubFrom(e);
+  });
 }
 
 /**
