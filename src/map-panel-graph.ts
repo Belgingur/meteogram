@@ -7,6 +7,7 @@ import {
   windText,
 } from "./graph-card";
 import {
+  DAY_LABEL_PAD,
   esc,
   formatPrecipTick,
   formatTempTick,
@@ -20,6 +21,7 @@ import {
   TICK_COLOR,
   TICK_LABEL_DY,
   windTicksFor,
+  wireStickyDayLabels,
   wireTapToScrub,
 } from "./render";
 import {
@@ -503,14 +505,36 @@ function buildPlotSvg(
     // ≥24 columns wide so headers don't collide — but the FIRST (and last) day
     // can be a thin sliver near midnight, where the label would pile onto the
     // next day's ("Mið 15 júl16 júl"). Skip a label when its day's span is too
-    // narrow to hold the text (task C1); the divider still marks the boundary.
+    // narrow to hold the text; the divider still marks the boundary.
     const label = dayHeaderLabel(points[i], t);
     const nextStart = k + 1 < dayStarts.length ? dayStarts[k + 1] : n;
     const availPx = (nextStart - i) * L.colW - 10;
     const estTextPx = label.length * L.dayLabelSize * 0.6;
+    // The first day has no divider to sit beside, so its header hugs the plot's
+    // left edge rather than the 00:00 column centre.
+    const labelX = (i > 0 ? x : 0) + DAY_LABEL_PAD;
+    const labelEnd = nextStart < n ? cx(nextStart) : n * L.colW;
     if (estTextPx <= availPx) {
+      // The label is carried by the scrolling SVG, so anchoring it to the day's
+      // left edge meant that scrolling into the middle of a day slid the text
+      // out through the scroller's left edge — leaving half a word ("rz" for
+      // "Sob. 12 wrz") stranded in the corner, which read as a rendering fault.
+      // It is made sticky after mount by wireStickyDayLabels (render.ts); the
+      // span it may travel within rides along as data attributes, so the scroll
+      // handler needs no chart geometry of its own.
       parts.push(
-        text(x + 8, L.dayLabelY, label, "#14202B", L.dayLabelSize, 900, "start"),
+        text(
+          labelX,
+          L.dayLabelY,
+          label,
+          "#14202B",
+          L.dayLabelSize,
+          900,
+          "start",
+        ).replace(
+          "<text ",
+          `<text class="day-label" data-x0="${labelX}" data-x1="${labelEnd - DAY_LABEL_PAD - estTextPx}" `,
+        ),
       );
     }
   }
@@ -1177,6 +1201,7 @@ export function renderMapPanelGraph(
     });
   }
   applyFit();
+  wireStickyDayLabels(scroll, scaleFn);
   scrollToScrub(scroll, geo, idx, L.colW, scaleFn);
   update();
   host.querySelector(".chart-fs-btn")?.addEventListener("click", () => opts.onFullscreen?.());
