@@ -136,8 +136,9 @@ describe("data-encoding colours", () => {
     // `.sel-stat-precip` and the hero card's rain value both used #2E6FB2 —
     // the colour this widget reserves for a temperature below freezing.
     expect(componentStyles).toContain(
-      `.sel-stat-precip { color: ${DATA_COLORS.precip}; }`,
+      `.sel-stat-precip { color: ${DATA_COLORS.precipText}; }`,
     );
     expect(DATA_COLORS.precip).not.toBe(DATA_COLORS.tempCold);
+    expect(DATA_COLORS.precipText).not.toBe(DATA_COLORS.tempCold);
   });
 });

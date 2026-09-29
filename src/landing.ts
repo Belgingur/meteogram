@@ -203,7 +203,7 @@ export function nowCardHtml(
         </div>
         <div class="stat">
           <div class="stat-label">${esc(t.precip)}</div>
-          <div class="stat-value" style="color:${DATA_COLORS.precip}">${p.precipMm.toFixed(1)} mm</div>
+          <div class="stat-value" style="color:${DATA_COLORS.precipText}">${p.precipMm.toFixed(1)} mm</div>
         </div>
         <div class="stat stat--wind-card">
           <div class="stat-label">${esc(t.wind)}</div>
@@ -214,7 +214,7 @@ export function nowCardHtml(
 }
 
 const chevron = (cls = ""): string =>
-  `<svg class="${cls}" width="14" height="14" viewBox="0 0 14 14" style="flex:none"><path d="M3 5l4 4 4-4" fill="none" stroke="#6B7A86" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  `<svg class="${cls}" width="14" height="14" viewBox="0 0 14 14" style="flex:none"><path d="M3 5l4 4 4-4" fill="none" stroke="${DATA_COLORS.neutral}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 
 /** Settings pill (1c): "{model} · {place} · {LANG}" */
 export function pillHtml(summary: string): string {
@@ -238,7 +238,7 @@ function hourCells(p: HourPoint, iconSize: number): string {
     `<span class="h-icon">${symbolImg(p.symbol, iconSize)}</span>` +
     `<span class="h-temp" style="color:${p.tempC === null ? DATA_COLORS.none : tempColor(Math.round(p.tempC))}">${p.tempC === null ? "–" : `${Math.round(p.tempC)}°`}</span>` +
     `<span class="h-precip">${p.precipMm > 0.05 ? p.precipMm.toFixed(1) : "–"}</span>` +
-    `<span class="h-wind">${esc(windText(p))} ${arrowSvg(p.dirDeg, 14, "#6B7A86")}</span>`
+    `<span class="h-wind">${esc(windText(p))} ${arrowSvg(p.dirDeg, 14, DATA_COLORS.neutral)}</span>`
   );
 }
 
@@ -390,7 +390,7 @@ export function dayChipsHtml(
         ? `<div class="dc-date">${esc(d.dateShort)}</div>`
         : "";
       return `
-      <button class="day-chip${sel ? " sel" : ""}" type="button" data-day="${i}">
+      <button class="day-chip${sel ? " sel" : ""}" type="button" data-day="${i}" aria-pressed="${sel}">
         <div class="dc-name">${esc(d.name)}</div>
         ${date}
         <div class="dc-icon">${symbolImg(d.noonSymbol, showDate ? 30 : 26)}</div>
@@ -398,7 +398,7 @@ export function dayChipsHtml(
       </button>`;
     })
     .join("");
-  return `<div class="day-chips">${chips}</div>`;
+  return `<div class="day-chips"><div class="dc-track">${chips}</div></div>`;
 }
 
 /**
@@ -536,12 +536,12 @@ export function overlayHtml(
   const chips = models
     .map(
       (m, i) =>
-        `<button class="chip${m.id === selectedModelId ? " on" : ""}" type="button" data-model="${i}">${esc(m.name)}</button>`,
+        `<button class="chip${m.id === selectedModelId ? " on" : ""}" type="button" data-model="${i}" aria-pressed="${m.id === selectedModelId}">${esc(m.name)}</button>`,
     )
     .join("");
   return `
     <div class="backdrop">
-      <div class="overlay" role="dialog" aria-modal="true" aria-label="${esc(t.settings)}">
+      <div class="overlay" role="dialog" aria-modal="true" aria-label="${esc(t.settings)}" tabindex="-1">
         <div class="overlay-head">
           <div class="overlay-title">${esc(t.settings)}</div>
           <button class="overlay-close" type="button" aria-label="${esc(t.close)}">
@@ -556,13 +556,13 @@ export function overlayHtml(
             <div class="chips chips-langs">
               ${LANGS.map(
                 (l) =>
-                  `<button class="chip${lang === l.code ? " on" : ""}" type="button" data-lang="${l.code}">${esc(l.name)}</button>`,
+                  `<button class="chip${lang === l.code ? " on" : ""}" type="button" data-lang="${l.code}" aria-pressed="${lang === l.code}">${esc(l.name)}</button>`,
               ).join("")}
             </div>
           </div>
           <div class="ov-col ov-col--station">
             <div class="section-label">${esc(t.location)}</div>
-            <input class="station-search" type="text" value="${esc(query)}" placeholder="${esc(t.search)}">
+            <input class="station-search" type="text" enterkeyhint="search" value="${esc(query)}" placeholder="${esc(t.search)}" aria-label="${esc(t.search)}" autocomplete="off">
             <div class="station-list">${stationRowsHtml(places, selected, query, t)}</div>
           </div>
         </div>

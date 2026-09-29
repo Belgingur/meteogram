@@ -1,3 +1,4 @@
+import { DATA_COLORS } from "./colors";
 import type { Labels } from "./i18n";
 import {
   buildMeteogram,
@@ -49,6 +50,35 @@ export function windText(p: HourPoint): string {
   if (p.windMs === null) return "–";
   const w = Math.round(p.windMs);
   return p.gustMs === null ? `${w}` : `${w} (${Math.round(p.gustMs)})`;
+}
+
+/**
+ * What a screen reader announces for the scrubbed hour: the readout, in words.
+ * "Wed 8 July · 12:00, 11°, 0.4 mm, 5 (9) m/s SW".
+ */
+export function scrubValueText(p: HourPoint, t: Labels): string {
+  const temp = p.tempC === null ? "–" : `${Math.round(p.tempC)}°`;
+  const wind = p.windMs === null ? "–" : `${windText(p)} m/s ${compassLabel(p.dirDeg, t)}`.trim();
+  return `${scrubTimeLabel(p, t)}, ${temp}, ${p.precipMm.toFixed(1)} mm, ${wind}`;
+}
+
+/**
+ * Column a slider key moves the scrubber to, or null for a key it does not
+ * handle. The standard slider keys: arrows step one timestep, Page keys a day
+ * (24 columns — the chart's own unit), Home/End the ends. Clamped.
+ */
+export function scrubKeyIndex(key: string, idx: number, count: number): number | null {
+  const steps: Record<string, number> = {
+    ArrowLeft: -1,
+    ArrowDown: -1,
+    ArrowRight: 1,
+    ArrowUp: 1,
+    PageDown: -24,
+    PageUp: 24,
+  };
+  const next =
+    key === "Home" ? 0 : key === "End" ? count - 1 : key in steps ? idx + steps[key] : null;
+  return next === null ? null : Math.max(0, Math.min(count - 1, next));
 }
 
 /** "Mið. 8. júlí · 13:00" */
@@ -105,8 +135,10 @@ const CHIP_CLEARANCE_GAP = 10;
 const CHIP_LEFT_INSET = 4;
 
 /** Index of the hour closest to "now"; 0 when the series is in the future */
-export function nowIndex(points: HourPoint[]): number {
-  const now = Date.now();
+export function nowIndex(
+  points: HourPoint[],
+  now: number = Date.now(),
+): number {
   let best = 0;
   let bd = Infinity;
   for (let i = 0; i < points.length; i++) {
@@ -117,6 +149,23 @@ export function nowIndex(points: HourPoint[]): number {
     }
   }
   return best;
+}
+
+/**
+ * Column for the "now" marker, or -1 when now falls outside the series. Unlike
+ * {@link nowIndex} this does not clamp: a forecast that has not started yet, or
+ * one that has run out, must not draw "now" on its first or last column.
+ */
+export function nowMarkerIndex(
+  points: HourPoint[],
+  nowMs: number = Date.now(),
+): number {
+  if (!points.length) return -1;
+  const stepMs = timestepHours(points) * 3_600_000;
+  const first = points[0].utcMs - stepMs / 2;
+  const last = points[points.length - 1].utcMs + stepMs / 2;
+  if (nowMs < first || nowMs >= last) return -1;
+  return nowIndex(points, nowMs);
 }
 
 /**
@@ -178,7 +227,13 @@ export function renderGraphCard(
 ): void {
   let idx = Math.max(0, Math.min(points.length - 1, initialIdx));
   const layout = opts.compact ? LAYOUT_COMPACT : LAYOUT_FULL;
-  const { svg, axisSvg, rightAxisSvg, geo } = buildMeteogram(points, t, idx, layout);
+  const { svg, axisSvg, rightAxisSvg, geo } = buildMeteogram(
+    points,
+    t,
+    idx,
+    layout,
+    nowMarkerIndex(points),
+  );
   const roIcon = opts.compact ? 34 : 38;
 
   // In `bare` mode (the desktop detail panel) the enclosing panel supplies the
@@ -229,7 +284,8 @@ export function renderGraphCard(
       </div>
       <div class="mg-chart">
         ${axisSvg}
-        <div class="scroll">
+        <div class="scroll" role="slider" tabindex="0" aria-label="${esc(t.scrubSlider)}"
+             aria-orientation="horizontal" aria-valuemin="0" aria-valuemax="${points.length - 1}">
           ${laneChips}
           ${svg}
         </div>
@@ -249,37 +305,59 @@ export function renderGraphCard(
   const svgEl = host.querySelector<SVGSVGElement>(".mg-plot")!;
   const q = <T extends Element>(sel: string): T => host.querySelector(sel) as T;
 
+  // Looked up once: update() runs on every pointer move while scrubbing.
+  const scroller = q<HTMLElement>(".scroll");
+  const cursor = q<SVGLineElement>(".scrub-cursor");
+  const handle = q<SVGCircleElement>(".scrub-handle");
+  const dotTemp = q<SVGCircleElement>(".scrub-dot-temp");
+  const dotWind = q<SVGCircleElement>(".scrub-dot-wind");
+  const roTime = q<HTMLElement>(".ro-time");
+  const roTemp = q<HTMLElement>(".ro-temp");
+  const roPrecip = q<HTMLElement>(".ro-precip");
+  const roWindText = q<HTMLElement>(".ro-wind-text");
+  const roArrow = q<HTMLElement>(".ro-arrow");
+  const roCompass = q<HTMLElement>(".ro-compass");
+  const roIconEl = q<HTMLElement>(".ro-icon");
+  // Markup only changes when the value does: re-creating the <img> for an
+  // unchanged symbol makes it blink on slower phones mid-drag.
+  let shownDir: number | null | undefined;
+  let shownSymbol: string | undefined;
+
   const update = (): void => {
     const p = points[idx];
     const x = geo.cx(idx);
 
-    const cursor = q<SVGLineElement>(".scrub-cursor");
     cursor.setAttribute("x1", `${x}`);
     cursor.setAttribute("x2", `${x}`);
-    q<SVGCircleElement>(".scrub-handle").setAttribute("cx", `${x}`);
+    handle.setAttribute("cx", `${x}`);
 
-    const dotTemp = q<SVGCircleElement>(".scrub-dot-temp");
     dotTemp.setAttribute("cx", `${x}`);
     dotTemp.setAttribute("visibility", p.tempC === null ? "hidden" : "visible");
     if (p.tempC !== null) dotTemp.setAttribute("cy", `${geo.tempY(p.tempC)}`);
 
-    const dotWind = q<SVGCircleElement>(".scrub-dot-wind");
     dotWind.setAttribute("cx", `${x}`);
     dotWind.setAttribute("visibility", p.windMs === null ? "hidden" : "visible");
     if (p.windMs !== null) dotWind.setAttribute("cy", `${geo.windY(p.windMs)}`);
 
-    q<HTMLElement>(".ro-time").textContent = scrubTimeLabel(p, t);
-    const temp = q<HTMLElement>(".ro-temp");
-    temp.textContent = p.tempC === null ? "–" : `${Math.round(p.tempC)}°`;
-    temp.style.color = p.tempC === null ? "#5E7E99" : tempColor(Math.round(p.tempC));
-    q<HTMLElement>(".ro-precip").textContent = `${p.precipMm.toFixed(1)} mm`;
-    q<HTMLElement>(".ro-wind-text").textContent = windText(p);
-    q<HTMLElement>(".ro-arrow").innerHTML = arrowSvg(p.dirDeg, 14, "#16324A");
-    q<HTMLElement>(".ro-compass").textContent = compassLabel(p.dirDeg, t);
-    const url = symbolUrl(p.symbol);
-    q<HTMLElement>(".ro-icon").innerHTML = url
-      ? `<img src="${esc(url)}" width="${roIcon}" height="${roIcon}" alt="">`
-      : "";
+    scroller.setAttribute("aria-valuenow", String(idx));
+    scroller.setAttribute("aria-valuetext", scrubValueText(p, t));
+    roTime.textContent = scrubTimeLabel(p, t);
+    roTemp.textContent = p.tempC === null ? "–" : `${Math.round(p.tempC)}°`;
+    roTemp.style.color = p.tempC === null ? DATA_COLORS.neutral : tempColor(Math.round(p.tempC));
+    roPrecip.textContent = `${p.precipMm.toFixed(1)} mm`;
+    roWindText.textContent = windText(p);
+    if (p.dirDeg !== shownDir) {
+      roArrow.innerHTML = arrowSvg(p.dirDeg, 14, "#14202B");
+      shownDir = p.dirDeg;
+    }
+    roCompass.textContent = compassLabel(p.dirDeg, t);
+    if (p.symbol !== shownSymbol) {
+      const url = symbolUrl(p.symbol);
+      roIconEl.innerHTML = url
+        ? `<img src="${esc(url)}" width="${roIcon}" height="${roIcon}" alt="">`
+        : "";
+      shownSymbol = p.symbol;
+    }
   };
   update();
 
@@ -295,7 +373,6 @@ export function renderGraphCard(
   // centring would open on ~4h of history against ~4h of forecast. Anchoring the
   // cursor a lead-in from the left keeps the past reachable by scrolling back
   // while spending the card on what the card is for.
-  const scroller = host.querySelector<HTMLElement>(".scroll")!;
   wireStickyDayLabels(scroller);
   let anchored = false;
   const anchorCursor = (): void => {
@@ -331,7 +408,8 @@ export function renderGraphCard(
     if (typeof ResizeObserver !== "undefined") {
       const ro = new ResizeObserver(() => {
         anchorCursor();
-        if (anchored) ro.disconnect();
+        // Also let go if the card was repainted before it ever got a width.
+        if (anchored || !scroller.isConnected) ro.disconnect();
       });
       ro.observe(scroller);
     }
@@ -364,6 +442,26 @@ export function renderGraphCard(
   // to give it. A tap costs the pan nothing (a pan is a drag) and makes the
   // obvious gesture — touching the hour you want — work.
   wireTapToScrub(svgEl, scrubFrom);
+
+  // Keyboard: the scroller is the slider (role, value and label in the markup
+  // above). Moving off-screen scrolls the cursor back into view, one lead-in
+  // from the edge it left by.
+  scroller.addEventListener("keydown", (e) => {
+    const next = scrubKeyIndex(e.key, idx, points.length);
+    if (next === null) return;
+    e.preventDefault();
+    // Don't let the full-mode document handler step a second time.
+    e.stopPropagation();
+    if (next === idx) return;
+    idx = next;
+    update();
+    onScrub?.(idx);
+    const x = geo.cx(idx);
+    const pad = CURSOR_LEAD_COLUMNS * layout.colW;
+    if (x < scroller.scrollLeft + pad) scroller.scrollLeft = x - pad;
+    else if (x > scroller.scrollLeft + scroller.clientWidth - pad)
+      scroller.scrollLeft = x - scroller.clientWidth + pad;
+  });
 
   // …and dragging along the strip around the track still scrubs continuously.
   const hit = host.querySelector(".scrub-hit") as SVGRectElement;

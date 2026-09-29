@@ -15,7 +15,8 @@ npm run typecheck  # tsc --noEmit
 npm run lint       # eslint
 npm test           # vitest
 npm run build      # dist/bel-meteogram.js (single ES module)
-npm run test:e2e   # Playwright browser smoke tests
+npm run test:e2e   # Playwright smoke tests (desktop Chromium + iPhone WebKit;
+                   # first run: npx playwright install chromium webkit)
 ```
 
 ## Guidelines

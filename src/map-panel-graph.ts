@@ -3,7 +3,9 @@ import type { Labels } from "./i18n";
 import {
   arrowSvg,
   compassLabel,
+  scrubKeyIndex,
   scrubTimeLabel,
+  scrubValueText,
   windText,
 } from "./graph-card";
 import {
@@ -20,6 +22,7 @@ import {
   TEMP_LABEL_CAP,
   TICK_COLOR,
   TICK_LABEL_DY,
+  windMax,
   windTicksFor,
   wireStickyDayLabels,
   wireTapToScrub,
@@ -147,7 +150,7 @@ export function chartLayoutAtHeight(
 /** Shortest chart worth resolving bands for; below this the lanes are noise. */
 const MIN_EXPANDED_CHART_H = 240;
 
-const CHART_COMPACT: ChartLayout = {
+export const CHART_COMPACT: ChartLayout = {
   colW: 26,
   axisW: 46,
   rightAxisW: 24,
@@ -341,7 +344,7 @@ function chartTempScale(
  * gave a landscape phone scaled to 0.6 the same number of labels as a desktop
  * panel at 1.0, crammed into 60% of the room.
  */
-function resolveChartLayout(
+export function resolveChartLayout(
   base: ChartLayout,
   points: HourPoint[],
   displayScale = 1,
@@ -350,14 +353,20 @@ function resolveChartLayout(
   const tempLanePx = (base.tempBase - base.tempTop) * scale;
   const windLanePx = (base.windBase - base.windTop) * scale;
   const { lo, hi, ticks } = chartTempScale(points, maxLabelsFor(tempLanePx));
+  // The layout's own max is a floor, not a ceiling: `wy` clamps to it, so a
+  // fixed 15 m/s flattened every stronger wind and gust onto the lane's top
+  // edge — a storm read as a plateau here and as a peak on the phone chart,
+  // which has always scaled to the data with the same rule.
+  const wMax = Math.max(base.windMax, windMax(points));
   return {
     ...base,
     tempLo: lo,
     tempHi: hi,
     tempTicks: ticks,
+    windMax: wMax,
     // Derived from the shared tick rule rather than hardcoded per layout, so the
     // wind scale reads the same here as on the mobile chart.
-    windTicks: windTicksFor(base.windMax, windLanePx),
+    windTicks: windTicksFor(wMax, windLanePx),
   };
 }
 
@@ -605,8 +614,8 @@ function buildPlotSvg(
     if (dir !== null) {
       parts.push(
         `<g transform="translate(${cx(i)} ${arrowRow}) rotate(${((dir % 360) + 360) % 360})">` +
-          `<line x1="0" y1="-${ah}" x2="0" y2="${ah}" stroke="#6B7A86" stroke-width="2" stroke-linecap="round"/>` +
-          `<path d="${head}" fill="none" stroke="#6B7A86" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>` +
+          `<line x1="0" y1="-${ah}" x2="0" y2="${ah}" stroke="${DATA_COLORS.neutral}" stroke-width="2" stroke-linecap="round"/>` +
+          `<path d="${head}" fill="none" stroke="${DATA_COLORS.neutral}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>` +
           `</g>`,
       );
     }
@@ -642,7 +651,7 @@ function buildPlotSvg(
     for (let i = 1; i < n; i += L.windLabelEvery) {
       const v = points[i].windMs;
       if (v !== null) {
-        parts.push(text(cx(i), wy(v) - 9, `${Math.round(v)}`, "#2F7C55", 10.5, 800, "middle"));
+        parts.push(text(cx(i), wy(v) - 9, `${Math.round(v)}`, DATA_COLORS.windText, 10.5, 800, "middle"));
       }
     }
   }
@@ -650,23 +659,29 @@ function buildPlotSvg(
   const hourStep = L.gridEvery === 1 ? 1 : 2;
   for (let i = 0; i < n; i += hourStep) {
     const hh = String(points[i].local.getUTCHours()).padStart(2, "0");
-    parts.push(text(cx(i), L.hourLabelY, hh, "#6B7A86", L.hourLabelSize, 700, "middle"));
+    parts.push(text(cx(i), L.hourLabelY, hh, DATA_COLORS.neutral, L.hourLabelSize, 700, "middle"));
   }
 
   const anaX = cx(Math.max(0, Math.min(n - 1, anaIdx)));
-  const nowX = cx(Math.max(0, Math.min(n - 1, nowIdx)));
-  const nowTemp = points[nowIdx]?.tempC ?? null;
   // "Now" is the line a reader looks for, so it carries the accent; the analysis
   // time is context (and usually the chart's own left edge, since a run starts
   // there), so it stays a quiet dashed hairline.
   parts.push(
-    `<line class="chart-ana" x1="${anaX}" x2="${anaX}" y1="${L.plotTop}" y2="${L.plotBottom}" stroke="#6B7A86" stroke-width="1.2" stroke-dasharray="4 3"/>`,
-    `<line class="chart-now" x1="${nowX}" x2="${nowX}" y1="${L.plotTop}" y2="${L.plotBottom}" stroke="#F0A32F" stroke-width="2"/>`,
+    `<line class="chart-ana" x1="${anaX}" x2="${anaX}" y1="${L.plotTop}" y2="${L.plotBottom}" stroke="${DATA_COLORS.neutral}" stroke-width="1.2" stroke-dasharray="4 3"/>`,
   );
-  if (nowTemp !== null) {
+  // -1 (now outside the run) draws no marker rather than parking one on an
+  // edge column, where it would label a stale or future hour as "now".
+  if (nowIdx >= 0 && nowIdx < n) {
+    const nowX = cx(nowIdx);
+    const nowTemp = points[nowIdx].tempC;
     parts.push(
-      `<circle class="chart-now-dot" cx="${nowX}" cy="${ty(nowTemp)}" r="4.5" fill="${DATA_COLORS.temp}" stroke="#fff" stroke-width="1.5"/>`,
+      `<line class="chart-now" x1="${nowX}" x2="${nowX}" y1="${L.plotTop}" y2="${L.plotBottom}" stroke="${DATA_COLORS.now}" stroke-width="2"/>`,
     );
+    if (nowTemp !== null) {
+      parts.push(
+        `<circle class="chart-now-dot" cx="${nowX}" cy="${ty(nowTemp)}" r="4.5" fill="${DATA_COLORS.temp}" stroke="#fff" stroke-width="1.5"/>`,
+      );
+    }
   }
 
   const si = Math.max(0, Math.min(n - 1, scrubIdx));
@@ -679,7 +694,7 @@ function buildPlotSvg(
     `<circle class="scrub-dot-wind" cx="${sx}" cy="${sWind === null ? 0 : wy(sWind)}" r="4" fill="${DATA_COLORS.wind}" stroke="#fff" stroke-width="1.5"${sWind === null ? ' visibility="hidden"' : ""}/>`,
   );
 
-  const svg = `<svg class="chart-plot" width="${width}" height="${L.height}" viewBox="0 0 ${width} ${L.height}" style="display:block;touch-action:none;cursor:crosshair" role="img">${parts.join("")}</svg>`;
+  const svg = `<svg class="chart-plot" width="${width}" height="${L.height}" viewBox="0 0 ${width} ${L.height}" style="display:block;touch-action:none;cursor:crosshair" aria-hidden="true">${parts.join("")}</svg>`;
   const geo: ChartGeometry = {
     width,
     count: n,
@@ -706,6 +721,7 @@ const fsCollapseSvg =
 
 export interface MapPanelGraphOptions {
   scrubIdx: number;
+  /** Column holding "now"; -1 when now is outside the run (no marker) */
   nowIdx: number;
   anaIdx: number;
   onScrub: (idx: number) => void;
@@ -855,7 +871,11 @@ export function chartBlock(
   return `
     <div class="chart${fullscreen ? " chart-fs" : ""}">
       ${axis}
-      <div class="chart-scroll">
+      <div class="chart-scroll"${
+        withRail
+          ? ""
+          : ` role="slider" tabindex="0" aria-label="${esc(t.scrubSlider)}" aria-orientation="horizontal" aria-valuemin="0" aria-valuemax="${points.length - 1}" aria-valuenow="${si}"`
+      }>
         ${rail}
         ${chips}
         ${svg}
@@ -896,7 +916,7 @@ function readoutHtml(
 ): string {
   const p = points[idx];
   const temp = p.tempC === null ? "–" : `${Math.round(p.tempC)}°`;
-  const tc = p.tempC === null ? "#6B7A86" : tempColorPanel(Math.round(p.tempC));
+  const tc = p.tempC === null ? DATA_COLORS.neutral : tempColorPanel(Math.round(p.tempC));
   const url = symbolUrl(p.symbol);
   const icon = url
     ? `<img src="${esc(url)}" width="34" height="34" alt="">`
@@ -1006,6 +1026,10 @@ export function renderMapPanelGraph(
   const scaleFn = opts.fit ? chartDisplayScale(host) : (): number => 1;
   // Landscape scrubber overlay (present only when opts.fit renders the rail).
   const rail = host.querySelector<HTMLElement>(".scrub-rail");
+  // The slider is the landscape rail when there is one, otherwise the scroller
+  // itself (role and value in chartBlock's markup), so the chart can be
+  // scrubbed from the keyboard, and heard, in every layout.
+  const slider = rail ?? scroll;
   const grab = host.querySelector<HTMLElement>(".scrub-grab");
   const railCursor = host.querySelector<HTMLElement>(".chart-scroll > .scrub-cursor");
   // Landscape floating scrub-readout popup (present only when opts.fit).
@@ -1036,43 +1060,59 @@ export function renderMapPanelGraph(
   );
 
   const q = <T extends Element>(sel: string): T => host.querySelector(sel) as T;
+  // Looked up once: update() runs on every pointer move while scrubbing.
+  // Scoped to the plot: the landscape scrubber adds an HTML .scrub-cursor
+  // sibling inside .chart-scroll that must not shadow this SVG line.
+  const cursor = q<SVGLineElement>(".chart-plot .scrub-cursor");
+  const dotTemp = q<SVGCircleElement>(".scrub-dot-temp");
+  const dotWind = q<SVGCircleElement>(".scrub-dot-wind");
+  const roTime = q<HTMLElement>(".ro-time");
+  const roTemp = q<HTMLElement>(".ro-temp");
+  const roPrecip = q<HTMLElement>(".ro-precip");
+  const roWindText = q<HTMLElement>(".ro-wind-text");
+  const roArrow = q<HTMLElement>(".ro-arrow");
+  const roCompass = q<HTMLElement>(".ro-compass");
+  const roIcon = q<HTMLElement>(".ro-icon");
+  // Markup only changes when the value does: re-creating the <img> for an
+  // unchanged symbol makes it blink mid-drag (same as the phone card).
+  let shownDir: number | null | undefined;
+  let shownSymbol: string | undefined;
   const update = (): void => {
     const p = points[idx];
     const x = geo.cx(idx);
-    // Scoped to the plot: the landscape scrubber adds an HTML .scrub-cursor
-    // sibling inside .chart-scroll that must not shadow this SVG line.
-    q<SVGLineElement>(".chart-plot .scrub-cursor").setAttribute("x1", `${x}`);
-    q<SVGLineElement>(".chart-plot .scrub-cursor").setAttribute("x2", `${x}`);
-    const dotTemp = q<SVGCircleElement>(".scrub-dot-temp");
+    cursor.setAttribute("x1", `${x}`);
+    cursor.setAttribute("x2", `${x}`);
     dotTemp.setAttribute("cx", `${x}`);
     dotTemp.setAttribute("visibility", p.tempC === null ? "hidden" : "visible");
     if (p.tempC !== null) dotTemp.setAttribute("cy", `${geo.tempY(p.tempC)}`);
-    const dotWind = q<SVGCircleElement>(".scrub-dot-wind");
     dotWind.setAttribute("cx", `${x}`);
     dotWind.setAttribute("visibility", p.windMs === null ? "hidden" : "visible");
     if (p.windMs !== null) dotWind.setAttribute("cy", `${geo.windY(p.windMs)}`);
 
-    q<HTMLElement>(".ro-time").textContent = scrubTimeLabel(p, opts.t);
-    const tempEl = q<HTMLElement>(".ro-temp");
-    tempEl.textContent = p.tempC === null ? "–" : `${Math.round(p.tempC)}°`;
-    tempEl.style.color =
-      p.tempC === null ? "#6B7A86" : tempColorPanel(Math.round(p.tempC));
-    q<HTMLElement>(".ro-precip").textContent = `${p.precipMm.toFixed(1)} mm`;
-    q<HTMLElement>(".ro-wind-text").textContent = windText(p);
-    q<HTMLElement>(".ro-arrow").innerHTML = arrowSvg(p.dirDeg, 13, "#14202B");
-    q<HTMLElement>(".ro-compass").textContent = compassLabel(p.dirDeg, opts.t);
-    const url = symbolUrl(p.symbol);
-    q<HTMLElement>(".ro-icon").innerHTML = url
-      ? `<img src="${esc(url)}" width="34" height="34" alt="">`
-      : "";
+    roTime.textContent = scrubTimeLabel(p, opts.t);
+    roTemp.textContent = p.tempC === null ? "–" : `${Math.round(p.tempC)}°`;
+    roTemp.style.color =
+      p.tempC === null ? DATA_COLORS.neutral : tempColorPanel(Math.round(p.tempC));
+    roPrecip.textContent = `${p.precipMm.toFixed(1)} mm`;
+    roWindText.textContent = windText(p);
+    if (p.dirDeg !== shownDir) {
+      roArrow.innerHTML = arrowSvg(p.dirDeg, 13, "#14202B");
+      shownDir = p.dirDeg;
+    }
+    roCompass.textContent = compassLabel(p.dirDeg, opts.t);
+    if (p.symbol !== shownSymbol) {
+      const url = symbolUrl(p.symbol);
+      roIcon.innerHTML = url
+        ? `<img src="${esc(url)}" width="34" height="34" alt="">`
+        : "";
+      shownSymbol = p.symbol;
+    }
 
     // Landscape scrubber: dot + HTML cursor line + slider a11y state.
     if (grab) grab.style.left = `${((x / geo.width) * 100).toFixed(2)}%`;
     if (railCursor) railCursor.style.left = `${x * scaleFn()}px`;
-    if (rail) {
-      rail.setAttribute("aria-valuenow", String(idx));
-      rail.setAttribute("aria-valuetext", scrubTimeLabel(p, opts.t));
-    }
+    slider.setAttribute("aria-valuenow", String(idx));
+    slider.setAttribute("aria-valuetext", scrubValueText(p, opts.t));
     // Moving the scrubber brings the popup back if the user had closed it.
     readoutPop?.classList.remove("is-closed");
   };
@@ -1183,35 +1223,21 @@ export function renderMapPanelGraph(
       update,
       scaleFn,
     );
-    rail.addEventListener("keydown", (e) => {
-      const jumps: Record<string, number> = {
-        ArrowLeft: -1,
-        ArrowRight: 1,
-        PageDown: -24,
-        PageUp: 24,
-      };
-      const next =
-        e.key === "Home"
-          ? 0
-          : e.key === "End"
-            ? points.length - 1
-            : e.key in jumps
-              ? idx + jumps[e.key]
-              : null;
-      if (next === null) return;
-      e.preventDefault();
-      // The widget's document-level keydown handler also scrubs on ←/→;
-      // handled keys stop here so a rail-focused arrow press moves one hour,
-      // not two.
-      e.stopPropagation();
-      const clamped = Math.max(0, Math.min(points.length - 1, next));
-      if (clamped === idx) return;
-      idx = clamped;
-      update();
-      scrollToScrub(scroll, geo, idx, L.colW, scaleFn);
-      opts.onScrub(idx);
-    });
   }
+  slider.addEventListener("keydown", (e) => {
+    const next = scrubKeyIndex(e.key, idx, points.length);
+    if (next === null) return;
+    e.preventDefault();
+    // The widget's document-level keydown handler also scrubs on ←/→;
+    // handled keys stop here so a slider-focused arrow press moves one hour,
+    // not two.
+    e.stopPropagation();
+    if (next === idx) return;
+    idx = next;
+    update();
+    scrollToScrub(scroll, geo, idx, L.colW, scaleFn);
+    opts.onScrub(idx);
+  });
   applyFit();
   wireStickyDayLabels(scroll, scaleFn);
   scrollToScrub(scroll, geo, idx, L.colW, scaleFn);
@@ -1222,6 +1248,12 @@ export function renderMapPanelGraph(
   // rotation / viewport change (the observed element is the chart's flex box).
   if (opts.fit && fitEl && typeof ResizeObserver !== "undefined") {
     const ro = new ResizeObserver(() => {
+      // Every repaint makes a new chart and a new observer; the old chart's is
+      // dropped here rather than left refitting a detached tree forever.
+      if (!fitEl.isConnected) {
+        ro.disconnect();
+        return;
+      }
       applyFit();
       scrollToScrub(scroll, geo, idx, L.colW, scaleFn);
     });

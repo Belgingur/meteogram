@@ -228,7 +228,7 @@ function linePath(
 
 /** Tick label colours */
 export const TICK_COLOR = DATA_COLORS.none;
-export const PRECIP_TICK_COLOR = DATA_COLORS.precip;
+export const PRECIP_TICK_COLOR = DATA_COLORS.precipText;
 
 /** Precipitation tick + gridline values, in mm */
 export const PRECIP_TICKS: readonly number[] = [1, 2];
@@ -585,6 +585,8 @@ export function buildMeteogram(
   t: Labels,
   scrubIdx: number,
   layout: MeteogramLayout = LAYOUT_FULL,
+  /** Column holding "now", or -1 when now is outside the series (no marker) */
+  nowIdx = -1,
 ): {
   svg: string;
   axisSvg: string;
@@ -657,7 +659,7 @@ export function buildMeteogram(
       // alone, the header scrolls out through the viewport's left edge and
       // leaves a clipped fragment of a weekday name in the corner.
       parts.push(
-        text(x0, L.dayLabelY, label, "#6B7A86", L.dayFont, 800).replace(
+        text(x0, L.dayLabelY, label, DATA_COLORS.neutral, L.dayFont, 800).replace(
           "<text ",
           `<text class="day-label" data-x0="${x0}" data-x1="${(nextStart < n ? cx(nextStart) : L.padL + n * L.colW) - 6 - estTextPx}" `,
         ),
@@ -739,8 +741,8 @@ export function buildMeteogram(
     if (dir !== null) {
       parts.push(
         `<g transform="translate(${cx(i)} ${L.arrowY}) rotate(${((dir % 360) + 360) % 360})">` +
-          `<line x1="0" y1="${-ah}" x2="0" y2="${ah}" stroke="#6B7A86" stroke-width="2" stroke-linecap="round"/>` +
-          `<path d="${head}" fill="none" stroke="#6B7A86" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>` +
+          `<line x1="0" y1="${-ah}" x2="0" y2="${ah}" stroke="${DATA_COLORS.neutral}" stroke-width="2" stroke-linecap="round"/>` +
+          `<path d="${head}" fill="none" stroke="${DATA_COLORS.neutral}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>` +
           `</g>`,
       );
     }
@@ -749,7 +751,23 @@ export function buildMeteogram(
   // Hour ticks every 3 h
   for (let i = 0; i < n; i += 3) {
     const hh = String(points[i].local.getUTCHours()).padStart(2, "0");
-    parts.push(text(cx(i), L.hourLabelY, hh, DATA_COLORS.none, L.hourFont, 700, "middle"));
+    parts.push(text(cx(i), L.hourLabelY, hh, DATA_COLORS.neutral, L.hourFont, 700, "middle"));
+  }
+
+  // "Now" marker: the accent line the desktop panel chart draws too, so the
+  // current hour reads the same on both. Under the scrubber, which starts on the
+  // same column and must stay on top once the reader moves it away.
+  if (nowIdx >= 0 && nowIdx < n) {
+    const nx = cx(nowIdx);
+    const nowTemp = points[nowIdx].tempC;
+    parts.push(
+      `<line class="chart-now" x1="${nx}" x2="${nx}" y1="${L.scrubTop}" y2="${L.scrubBottom}" stroke="${DATA_COLORS.now}" stroke-width="2"/>`,
+    );
+    if (nowTemp !== null) {
+      parts.push(
+        `<circle class="chart-now-dot" cx="${nx}" cy="${ty(nowTemp)}" r="${L.dotTempR}" fill="${DATA_COLORS.temp}" stroke="#ffffff" stroke-width="1.5"/>`,
+      );
+    }
   }
 
   // Scrubber (time cursor), drawn above the data: optional horizontal track,
@@ -764,7 +782,7 @@ export function buildMeteogram(
     );
   }
   parts.push(
-    `<line class="scrub-cursor" x1="${sx}" x2="${sx}" y1="${L.scrubTop}" y2="${L.scrubBottom}" stroke="#14202B" stroke-width="1.2" stroke-dasharray="2 3" opacity="0.5"/>`,
+    `<line class="scrub-cursor" x1="${sx}" x2="${sx}" y1="${L.scrubTop}" y2="${L.scrubBottom}" stroke="#14202B" stroke-width="1.2" stroke-dasharray="2 3" opacity="0.55"/>`,
     `<circle class="scrub-dot-temp" cx="${sx}" cy="${sTemp === null ? 0 : ty(sTemp)}" r="${L.dotTempR}" fill="${DATA_COLORS.temp}" stroke="#ffffff" stroke-width="1.5"${sTemp === null ? ' visibility="hidden"' : ""}/>`,
     `<circle class="scrub-dot-wind" cx="${sx}" cy="${sWind === null ? 0 : wy(sWind)}" r="${L.dotWindR}" fill="${DATA_COLORS.wind}" stroke="#ffffff" stroke-width="1.5"${sWind === null ? ' visibility="hidden"' : ""}/>`,
     `<circle class="scrub-handle" cx="${sx}" cy="${L.scrubTop}" r="${L.handleR}" fill="#14202B" stroke="#ffffff" stroke-width="2"/>`,
@@ -773,7 +791,7 @@ export function buildMeteogram(
     `<rect class="scrub-hit" x="0" y="${L.hitY}" width="${width}" height="${L.hitH}" fill="transparent" style="touch-action:none;cursor:ew-resize"/>`,
   );
 
-  const svg = `<svg class="mg-plot" width="${width}" height="${L.height}" viewBox="0 0 ${width} ${L.height}" style="display:block" role="img">${parts.join("")}</svg>`;
+  const svg = `<svg class="mg-plot" width="${width}" height="${L.height}" viewBox="0 0 ${width} ${L.height}" style="display:block" aria-hidden="true">${parts.join("")}</svg>`;
 
   const geo: MeteogramGeometry = {
     width,

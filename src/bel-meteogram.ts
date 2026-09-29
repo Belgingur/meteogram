@@ -11,6 +11,7 @@ import {
   forecastSpanLabel,
   indexAtInstant,
   nowIndex,
+  nowMarkerIndex,
   renderGraphCard,
 } from "./graph-card";
 import { labels, type Labels } from "./i18n";
@@ -141,6 +142,33 @@ function stored(key: string): string | null {
 }
 
 /**
+ * A selector that finds "the same control" in a freshly painted body: its first
+ * class plus the data attribute that tells its siblings apart (a day, a view, a
+ * language, a model). Null for anything without a class to go by.
+ */
+function focusSelector(el: Element | null): string | null {
+  if (!(el instanceof HTMLElement) || !el.classList.length) return null;
+  const cls = CSS.escape(el.classList[0]);
+  for (const key of ["day", "view", "lang", "model"]) {
+    const v = el.dataset[key];
+    if (v !== undefined) return `.${cls}[data-${key}="${CSS.escape(v)}"]`;
+  }
+  return `.${cls}`;
+}
+
+/** Whether a key event started in something that takes text input. */
+function isEditableTarget(target: EventTarget | undefined): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  if (target.isContentEditable) return true;
+  if (target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement) return true;
+  if (target instanceof HTMLInputElement) {
+    // Button-like inputs ignore arrows; text, number, range etc. use them.
+    return !["button", "checkbox", "radio", "reset", "submit"].includes(target.type);
+  }
+  return false;
+}
+
+/**
  * <bel-meteogram> — the Belgingur meteogram as a self-contained widget.
  *
  * Two modes:
@@ -263,7 +291,21 @@ export class BelMeteogram extends HTMLElement {
   private refitRaf = 0;
   private refitHeight = -1;
   private onKeyDown = (e: KeyboardEvent): void => {
-    if (!this.isFull || !this.usesPanel) return;
+    if (!this.isFull) return;
+    // Registered on the document, so this sees every key on the host page too.
+    // Arrows and Escape in a text field (our station search, or the host app's
+    // own search box) belong to that field, and a key something else already
+    // handled — the landscape scrub rail, say — must not act twice.
+    if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) return;
+    // Escape closes the settings dialog first — from the search box too — and
+    // on every layout, before it can reach the panel-collapse below.
+    if (e.key === "Escape" && this.settingsOpen && this.closeOverlay) {
+      e.preventDefault();
+      this.closeOverlay();
+      return;
+    }
+    if (!this.usesPanel) return;
+    if (isEditableTarget(e.composedPath()[0])) return;
     if (e.key === "Escape" && this.isExpanded()) {
       e.preventDefault();
       this.collapsePanel();
@@ -289,7 +331,7 @@ export class BelMeteogram extends HTMLElement {
     }
     this.noteScrub(gp, idx);
     this.graphScrubSetter?.(idx);
-    this.persistMapPanel();
+    this.persistScrubSoon();
   };
   private readonly mql = matchMedia("(min-width: 900px)");
   private readonly onBreakpoint = (): void => {
@@ -408,6 +450,8 @@ export class BelMeteogram extends HTMLElement {
     window.removeEventListener("resize", this.onResize);
     if (this.resizeRaf) cancelAnimationFrame(this.resizeRaf);
     this.cancelGraphRefit();
+    // Flush a pending scrub write rather than drop it.
+    if (this.persistTimer) this.persistMapPanel();
   }
 
   /**
@@ -465,7 +509,29 @@ export class BelMeteogram extends HTMLElement {
    * name and the "now" temperature so the host can render the pin label
    * ("{place} · {temp}°").
    */
+  /** Selector to focus after the next paint, overriding "whatever had focus"
+   *  (opening the settings dialog focuses the dialog, closing it the pill). */
+  private focusAfterPaint: string | null = null;
+
+  /** Closes the settings dialog while it is open (set by its wiring). */
+  private closeOverlay: (() => void) | null = null;
+
+  /** Pending {@link persistScrubSoon} write */
+  private persistTimer = 0;
+
+  /**
+   * Persist after scrubbing settles. A hover sweep changes column a dozen times
+   * a second, and each write is a synchronous localStorage read, parse,
+   * stringify and write on the pointer-move path.
+   */
+  private persistScrubSoon(): void {
+    clearTimeout(this.persistTimer);
+    this.persistTimer = window.setTimeout(() => this.persistMapPanel(), 250);
+  }
+
   private persistMapPanel(): void {
+    clearTimeout(this.persistTimer);
+    this.persistTimer = 0;
     if (!this.isFull || !this.usesPanel) return;
     writeMapPanelState({
       selectedDay: this.selectedDay,
@@ -818,8 +884,33 @@ export class BelMeteogram extends HTMLElement {
     // random spot. Restoring scrollLeft keeps it exactly where it was.
     const prevGraph = this.body.querySelector<HTMLElement>(".chart-scroll");
     const prevLeft = prevGraph?.scrollLeft ?? 0;
+    // And the day-chip row: tapping a chip scrolled off to the right rebuilt
+    // the row at scrollLeft 0, hiding the chip just picked.
+    const prevChipsLeft =
+      this.body.querySelector<HTMLElement>(".day-chips")?.scrollLeft ?? 0;
+    // Focus lives on an element this repaint is about to throw away, which
+    // would drop a keyboard user back to the top of the page after every chip,
+    // tab or language press. Remember it by what it IS, not by node.
+    const focusSel = this.focusAfterPaint ?? focusSelector(this.root.activeElement);
+    this.focusAfterPaint = null;
     if (this.isFull) this.paintFull();
     else this.paintGraph();
+    const chips = this.body.querySelector<HTMLElement>(".day-chips");
+    if (chips) {
+      chips.scrollLeft = prevChipsLeft;
+      const sel = chips.querySelector<HTMLElement>(".day-chip.sel");
+      if (sel) {
+        const pad = parseFloat(getComputedStyle(chips).scrollPaddingLeft) || 0;
+        const left = sel.offsetLeft - chips.offsetLeft - pad;
+        const right = sel.offsetLeft - chips.offsetLeft + sel.offsetWidth + pad;
+        if (left < chips.scrollLeft) chips.scrollLeft = left;
+        else if (right > chips.scrollLeft + chips.clientWidth)
+          chips.scrollLeft = right - chips.clientWidth;
+      }
+    }
+    if (focusSel) {
+      this.body.querySelector<HTMLElement>(focusSel)?.focus({ preventScroll: true });
+    }
     if (prevTop > 0) {
       const nextScroller = this.body.querySelector<HTMLElement>(
         ".ls-scroll, .exp-left",
@@ -1098,11 +1189,11 @@ export class BelMeteogram extends HTMLElement {
       if (wide) {
         const { setScrubIdx } = renderMapPanelGraph(host, gp, {
           scrubIdx: initial,
-          nowIdx: nowI,
+          nowIdx: nowMarkerIndex(gp),
           anaIdx: this.analysisIndex(gp),
           onScrub: (i) => {
             this.noteScrub(gp, i);
-            this.persistMapPanel();
+            this.persistScrubSoon();
           },
           onFullscreen: () => {
             // The graph's toggle grows/shrinks the same panel in place.
@@ -1251,6 +1342,9 @@ export class BelMeteogram extends HTMLElement {
     );
     q<HTMLButtonElement>(".pill")?.addEventListener("click", () => {
       this.settingsOpen = true;
+      // Into the dialog, not onto the search box: focusing an input would pop
+      // the keyboard up over the dialog on a phone.
+      this.focusAfterPaint = ".overlay";
       this.paint();
     });
     q<HTMLButtonElement>(".retry")?.addEventListener("click", () => this.load());
@@ -1432,13 +1526,35 @@ export class BelMeteogram extends HTMLElement {
     }
 
     // Settings overlay
+    this.closeOverlay = null;
     const backdrop = q<HTMLElement>(".backdrop");
     if (!backdrop) return;
     const closeOverlay = (): void => {
       this.settingsOpen = false;
       this.query = "";
+      this.focusAfterPaint = ".pill";
       this.paint();
     };
+    this.closeOverlay = closeOverlay;
+    // aria-modal promises focus stays inside: wrap Tab at both ends.
+    const dialog = q<HTMLElement>(".overlay");
+    dialog?.addEventListener("keydown", (e) => {
+      if (e.key !== "Tab") return;
+      const items = [
+        ...dialog.querySelectorAll<HTMLElement>("button, input, [tabindex='0']"),
+      ].filter((el) => el.offsetParent !== null);
+      if (!items.length) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      const active = this.root.activeElement;
+      if (e.shiftKey && (active === first || active === dialog)) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && active === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    });
     backdrop.addEventListener("click", (e) => {
       if (e.target === backdrop) closeOverlay();
     });
@@ -1505,6 +1621,14 @@ export class BelMeteogram extends HTMLElement {
 
 class BelMeteogramSheet extends HTMLElement {
   private root = this.attachShadow({ mode: "open" });
+  /** Where focus was when the sheet opened; it goes back there on close. */
+  private returnFocus: HTMLElement | null = null;
+  private onKeyDown = (e: KeyboardEvent): void => {
+    if (e.key === "Escape" && !e.defaultPrevented) {
+      e.preventDefault();
+      this.close();
+    }
+  };
 
   configure(title: string, attributes: Record<string, string>): void {
     const style = document.createElement("style");
@@ -1517,7 +1641,7 @@ class BelMeteogramSheet extends HTMLElement {
         <div class="grabber"></div>
         <div class="sheet-head">
           <div class="sheet-title"></div>
-          <button class="close" aria-label="close">
+          <button class="close" type="button" aria-label="${esc(labels(attributes.language ?? "").close)}">
             <svg width="16" height="16" viewBox="0 0 16 16"><path d="M3 3l10 10M13 3L3 13" stroke="#16324A" stroke-width="2.2" stroke-linecap="round"/></svg>
           </button>
         </div>
@@ -1538,6 +1662,19 @@ class BelMeteogramSheet extends HTMLElement {
     this.dragToDismiss(sheet);
 
     this.root.append(style, scrim);
+  }
+
+  connectedCallback(): void {
+    // A modal takes focus on open (and gives it back on close), or a keyboard
+    // or screen-reader user is left behind it on the page.
+    const active = document.activeElement;
+    this.returnFocus = active instanceof HTMLElement ? active : null;
+    document.addEventListener("keydown", this.onKeyDown);
+    this.root.querySelector<HTMLButtonElement>(".close")?.focus({ preventScroll: true });
+  }
+
+  disconnectedCallback(): void {
+    document.removeEventListener("keydown", this.onKeyDown);
   }
 
   private dragToDismiss(sheet: HTMLDivElement): void {
@@ -1576,6 +1713,8 @@ class BelMeteogramSheet extends HTMLElement {
 
   close(): void {
     this.remove();
+    if (this.returnFocus?.isConnected) this.returnFocus.focus({ preventScroll: true });
+    this.returnFocus = null;
   }
 }
 
