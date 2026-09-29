@@ -894,8 +894,13 @@ function readoutHtml(
   const icon = url
     ? `<img src="${esc(url)}" width="34" height="34" alt="">`
     : "";
+  // `title` as well as `aria-label`: the icon is a 32px glyph tucked into the
+  // readout row, easily read as decoration rather than as the control that
+  // maximises the panel. A hover tooltip is the cheapest way for it to say its
+  // own name.
+  const fsLabel = esc(expanded ? t.exitFullscreen : t.fullscreen);
   const fsBtn = showFsBtn
-    ? `<button class="chart-fs-btn" type="button" aria-label="${esc(expanded ? t.exitFullscreen : t.fullscreen)}">${expanded ? fsCollapseSvg : fsExpandSvg}</button>`
+    ? `<button class="chart-fs-btn" type="button" aria-label="${fsLabel}" title="${fsLabel}">${expanded ? fsCollapseSvg : fsExpandSvg}</button>`
     : "";
   // Landscape (fit): the readout floats over the chart as a dismissible popup
   // instead of taking a chrome band, so it carries its own minimize + close

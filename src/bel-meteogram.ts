@@ -521,19 +521,26 @@ export class BelMeteogram extends HTMLElement {
     this.paint();
   }
 
-  /** Expand to a comfortable two-column size, anchored to the panel's current
-   *  right edge so it opens into the map space on the left. */
+  /** Inset kept around a maximised panel so the map still frames it and the
+   *  reader can see they are looking at a panel rather than a new page. */
+  private static readonly MAXIMISE_INSET = 18;
+
+  /**
+   * Fill the host, less a thin margin.
+   *
+   * This used to stop at 920×760 regardless of the window, which on a wide
+   * screen left the control labelled "fullscreen" opening something under half
+   * the width — and the chart still scrolling at 11% of a five-day run. A
+   * maximise that does not maximise is worse than none: the reader concludes
+   * that is all the room there is and stops looking for more.
+   */
   private expandPanel(): void {
-    const w = Math.min(920, this.hostW() - 24);
-    const h = Math.min(760, this.hostH() - 24);
-    const rightEdge =
-      (this.panelPos.x >= 0 ? this.panelPos.x : this.hostW() - PANEL_W - 18) +
-      this.resolvedPanelW();
-    this.panelPos = {
-      x: Math.max(0, rightEdge - w),
-      y: this.panelPos.y >= 0 ? this.panelPos.y : 24,
+    const inset = BelMeteogram.MAXIMISE_INSET;
+    this.panelPos = { x: inset, y: inset };
+    this.panelSize = {
+      w: Math.max(MIN_PANEL_W, this.hostW() - inset * 2),
+      h: Math.max(MIN_PANEL_H_WIDE, this.hostH() - inset * 2),
     };
-    this.panelSize = { w, h };
     this.persistMapPanel();
     this.paint();
   }
@@ -1006,8 +1013,7 @@ export class BelMeteogram extends HTMLElement {
     // Two resize grips: bottom-left grows into the map on the left,
     // bottom-right grows to the right. Both carry a visible corner bracket +
     // resize cursor; a one-time pulse (added in wireFull) hints they're draggable.
-    // TODO(B2): true full-screen is intentionally out of scope for this pass —
-    // resizing from either corner is the primary "make it bigger" mechanism.
+    // The readout's maximise button is the one-step alternative (expandPanel).
     const resizeGrip = landscape
       ? ""
       : `<div class="panel-resize panel-resize-bl" data-resize-handle data-corner="bl" role="separator" aria-label="Resize" title="${esc(t.resize)}"></div>
