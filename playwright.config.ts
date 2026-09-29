@@ -17,6 +17,13 @@ export default defineConfig({
       name: "chromium",
       use: { ...devices["Desktop Chrome"] },
     },
+    // The public app is mostly read on phones, and iOS browsers are all
+    // WebKit: run the phone smoke tests there too, with touch.
+    {
+      name: "mobile-safari",
+      use: { ...devices["iPhone 13"] },
+      grep: /@mobile/,
+    },
   ],
   webServer: {
     command: "npm run dev -- --host 127.0.0.1 --port 4173",

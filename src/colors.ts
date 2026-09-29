@@ -17,16 +17,28 @@ export const DATA_COLORS = {
   temp: "#C81D25",
   /** Temperature below 0 °C. */
   tempCold: "#2E6FB2",
-  /** A reading the model does not carry. */
-  none: "#94A2AC",
-  /** Precipitation: bars, values, swatch. */
+  /** A reading the model does not carry. Also the axis tick labels, so it has
+      to pass 4.5:1 as text: the old #94A2AC was 2.6:1 on white. */
+  none: "#5E6B76",
+  /** Precipitation: bars and swatch. */
   precip: "#3D82C4",
+  /** Precipitation as TEXT (values, ticks): the bar blue is 4.0:1 on white,
+      short of 4.5:1, so type uses this darker step. Shifted toward cyan so
+      it cannot be mistaken for `tempCold`, the sub-zero blue. */
+  precipText: "#146C94",
   /** The lighter upper bound of a precipitation range. */
   precipMax: "#A8CBEA",
   /** Wind speed. */
   wind: "#3E8E63",
-  /** Gusts — the same hue, lightened, always dashed. */
-  gust: "#7FB394",
-  /** Direction arrows, tick labels: present but not a reading of its own. */
-  neutral: "#6B7A86",
+  /** Wind speed as TEXT, for the same reason as `precipText`. */
+  windText: "#2F7C55",
+  /** Gusts — the same hue, lightened, always dashed. Held at 3:1 on white
+      (non-text minimum); the old #7FB394 was 2.4:1. */
+  gust: "#5E9E78",
+  /** Direction arrows, hour and day labels: present but not a reading of its
+      own. 5.4:1 on white, 4.7:1 on the frost page background. */
+  neutral: "#5E6B76",
+  /** The "now" marker line — the same accent on the phone and desktop charts.
+      3.1:1 on white, the non-text minimum; the old #F0A32F was 2.1:1. */
+  now: "#D17F00",
 } as const;

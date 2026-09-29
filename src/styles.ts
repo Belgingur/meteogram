@@ -14,14 +14,17 @@ import { DATA_COLORS } from "./colors";
 export const componentStyles = `
 :host {
   --ink: #14202B;
-  --haze: #6B7A86;
-  --haze-2: #94A2AC;
+  --haze: #4F5C66;
+  --haze-2: #5E6B76;
   --frost: #E9EEF1;
   --paper: #FCFDFE;
   --tint: #EDF1F4;
   --line: #DCE3E8;
   --line-soft: #EAEEF1;
   --aurora: #1E8E6B;
+  /* --aurora as TEXT: the accent itself is 4.1:1 on white (3.6:1 on its own
+     haze), so labels drawn in it use this darker step. */
+  --aurora-ink: #177457;
   --aurora-haze: rgba(30, 142, 107, 0.10);
 
   display: block;
@@ -51,11 +54,15 @@ input:focus-visible,
   outline-offset: 2px;
 }
 
+/* The host is pointer-events: none (see :host), and in graph mode the card is
+   all there is — no .page to turn clicks back on — so without this the chart
+   ignored hover, taps and the wheel, and the error card's Retry was dead. */
 .card {
   background: var(--paper);
   border-radius: 20px;
   padding: 16px 0 6px;
   box-shadow: 0 1px 2px rgba(20, 32, 43, 0.06);
+  pointer-events: auto;
 }
 
 .head {
@@ -115,7 +122,7 @@ input:focus-visible,
   font-variant-numeric: tabular-nums;
 }
 .ro-temp { font-size: 19px; font-weight: 900; }
-.ro-precip { font-size: 13px; font-weight: 800; color: ${DATA_COLORS.precip}; }
+.ro-precip { font-size: 13px; font-weight: 800; color: ${DATA_COLORS.precipText}; }
 .ro-wind {
   display: flex;
   align-items: center;
@@ -590,7 +597,7 @@ input:focus-visible,
    the date line and every chip lands on 76; landscape keeps the date line, and a
    chip that cannot grow clips its own text out past both rounded edges (any
    locale whose date is wider than the box: "12 September", "12 września"). */
-.wide .day-chips { padding: 10px 14px 4px; gap: 6px; }
+.wide .day-chips { --dc-pad: 14px; --dc-gap: 6px; padding: 10px 0 4px; }
 .wide .day-chip {
   background: var(--paper);
   border-radius: 14px;
@@ -675,7 +682,7 @@ input:focus-visible,
 .exp-left .now-main { margin: 2px 0 10px; gap: 10px; }
 .exp-left .now-stats { grid-template-columns: 1fr 1fr; }
 .exp-left .stat--wind-card { grid-column: 1 / -1; }
-.exp-left .day-chips { padding: 6px 14px 8px; }
+.exp-left .day-chips { --dc-pad: 14px; padding: 6px 0 8px; }
 .exp-left .panel-table { flex: 1; min-height: 0; overflow-y: auto; }
 .exp-right {
   flex: 1;
@@ -928,16 +935,28 @@ input:focus-visible,
 .graph-compact .legend { gap: 6px 12px; padding: 6px 16px 12px; font-size: 10px; }
 
 /* ---- Mobile day-chip row + selected-day card ---- */
+/* Every chip is as wide as the widest one: a content-sized chip made "Á morgun"
+   wider than "Fim" beside it, and the row read as ragged. The track is a grid of
+   1fr columns sized at max-content, which the grid algorithm resolves to the
+   widest chip's width for every column. The side gutter lives on the track, not
+   the scroller, so it survives at the scrolled end in every engine. */
 .day-chips {
-  display: flex;
-  gap: 8px;
+  --dc-pad: 16px;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
-  padding: 2px 16px 10px;
+  padding: 2px 0 10px;
+  scroll-padding-inline: var(--dc-pad);
   scroll-snap-type: x proximity;
 }
+.dc-track {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: var(--dc-gap, 8px);
+  width: max-content;
+  padding: 0 var(--dc-pad);
+}
 .day-chip {
-  flex: none;
   scroll-snap-align: start;
   background: var(--paper);
   border: 2px solid transparent;
@@ -993,7 +1012,7 @@ input:focus-visible,
   color: var(--ink);
   white-space: nowrap;
 }
-.sel-stat-precip { color: ${DATA_COLORS.precip}; }
+.sel-stat-precip { color: ${DATA_COLORS.precipText}; }
 .panel-table .sel-stats { padding: 0 0 9px; }
 
 /* Hourly rows shared by the mobile selected-day card (46/34 grid). The side
@@ -1018,7 +1037,7 @@ input:focus-visible,
 /* The rail is a marker beside the hour, not a stroke through it: every row —
    marked or not, header included — carries the same 8px gutter, so the rail has
    room to read and no column shifts when the marker moves down the table. */
-.hrow-now .h-time { color: var(--aurora); font-weight: 900; }
+.hrow-now .h-time { color: var(--aurora-ink); font-weight: 900; }
 .hrow-head {
   border-top: none;
   padding: 4px 8px 8px;
@@ -1033,7 +1052,7 @@ input:focus-visible,
 .h-time { font-weight: 800; color: var(--ink); }
 .h-icon { display: flex; }
 .h-temp { text-align: right; font-weight: 900; }
-.h-precip { text-align: right; font-weight: 700; color: ${DATA_COLORS.precip}; }
+.h-precip { text-align: right; font-weight: 700; color: ${DATA_COLORS.precipText}; }
 .h-wind {
   display: flex;
   align-items: center;
@@ -1171,6 +1190,9 @@ input:focus-visible,
   background: var(--paper);
 }
 .station-search:focus { outline: 2px solid var(--aurora); }
+/* The dialog takes focus on open so the next Tab starts inside it; it is a
+   container, not a control, so it draws no ring of its own. */
+.overlay:focus { outline: none; }
 .station-list {
   display: flex;
   flex-direction: column;
@@ -1227,7 +1249,7 @@ input:focus-visible,
   /* A phone has no room for both; the distance is the useful half. */
   .station-coord { display: none; }
 }
-.station.sel .station-name { color: var(--aurora); }
+.station.sel .station-name { color: var(--aurora-ink); }
 
 /* Short viewport (a phone in landscape ≈ 320–430px tall): edge-to-edge dialog
    split into two columns so nothing is below the fold — model + language chips
