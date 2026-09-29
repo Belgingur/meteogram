@@ -17,6 +17,7 @@ import { labels, type Labels } from "./i18n";
 import {
   coordLabel,
   dayChipsHtml,
+  distanceKm,
   draggablePanelHeaderHtml,
   formatUtcMetaTime,
   groupDays,
@@ -876,18 +877,22 @@ export class BelMeteogram extends HTMLElement {
   /**
    * Stations for the settings overlay, ordered nearest-first to the current
    * point so the selected place and its neighbours top the list.
+   *
+   * Each place carries the distance it was sorted by, which the list then shows.
+   * The order was right before and still looked arbitrary, because nothing on
+   * screen said what it was — a reader who cannot see the rule assumes there
+   * isn't one.
    */
   private placeList(lat: number, lon: number): Place[] {
     const lang = this.uiLang;
-    const places = this.rawStations.map((s) => ({
+    const places: Place[] = this.rawStations.map((s) => ({
       name: localName(s.name, lang),
       lat: s.lat,
       lon: s.lon,
     }));
     if (!isNaN(lat) && !isNaN(lon)) {
-      const d = (p: Place): number =>
-        (p.lat - lat) ** 2 + (p.lon - lon) ** 2 * 0.2;
-      places.sort((a, b) => d(a) - d(b));
+      for (const p of places) p.distanceKm = distanceKm(lat, lon, p.lat, p.lon);
+      places.sort((a, b) => (a.distanceKm ?? 0) - (b.distanceKm ?? 0));
     }
     return places;
   }

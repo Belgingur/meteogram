@@ -1205,7 +1205,28 @@ input:focus-visible,
   font-weight: 800;
   color: var(--ink);
 }
-.station-sub { font-size: 12px; font-weight: 700; color: var(--haze-2); }
+.station-sub {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--haze-2);
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex: none;
+}
+/* The distance is what the list is ordered by, so it leads and carries the
+   weight; the coordinate stays as the quiet identifier it always was. */
+.station-dist {
+  font-weight: 800;
+  color: var(--haze);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.station-coord { white-space: nowrap; }
+@media (max-width: 430px) {
+  /* A phone has no room for both; the distance is the useful half. */
+  .station-coord { display: none; }
+}
 .station.sel .station-name { color: var(--aurora); }
 
 /* Short viewport (a phone in landscape ≈ 320–430px tall): edge-to-edge dialog
