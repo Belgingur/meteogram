@@ -503,7 +503,9 @@ export function stationRowsHtml(
     .filter(({ p }) => !q || foldName(p.name).includes(q))
     .slice(0, MAX_STATION_ROWS)
     .map(({ p, i }) => {
-      const sel = selected !== null && p.name === selected.name;
+      // By identity, not by name: two stations can share one, and the selected
+      // place is resolved by position and is always one of `places`.
+      const sel = p === selected;
       // The distance is what the list is sorted by, so it belongs on the row.
       // Without it the order looked arbitrary — the coordinates alone gave the
       // reader nothing to rank by, and a sorted list that cannot be seen to be
