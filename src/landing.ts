@@ -22,6 +22,43 @@ export interface Place {
   name: string;
   lat: number;
   lon: number;
+  /** Great-circle distance from the point being forecast, km. Filled by
+   *  placeList(); absent when there is no point to measure from. */
+  distanceKm?: number;
+}
+
+/**
+ * Great-circle distance in km (equirectangular approximation).
+ *
+ * Accurate to a fraction of a percent over the few hundred km that matter for
+ * "which station is nearest", and far cheaper than haversine. Replaces a fixed
+ * 0.2 weight on the longitude term — a cos²(lat) approximation hard-coded for
+ * Iceland (cos²64° ≈ 0.19). Nearer the equator the true factor approaches 1, so
+ * longitude counted for a fraction of what it should and the "nearest" ordering
+ * came out scrambled for every domain outside the North Atlantic.
+ */
+export function distanceKm(
+  aLat: number,
+  aLon: number,
+  bLat: number,
+  bLon: number,
+): number {
+  const toRad = Math.PI / 180;
+  const meanLat = ((aLat + bLat) / 2) * toRad;
+  const dLat = (bLat - aLat) * toRad;
+  let dLon = (bLon - aLon) * toRad;
+  // Take the short way round the antimeridian.
+  if (dLon > Math.PI) dLon -= 2 * Math.PI;
+  if (dLon < -Math.PI) dLon += 2 * Math.PI;
+  const x = dLon * Math.cos(meanLat);
+  return Math.hypot(x, dLat) * 6371;
+}
+
+/** "12 km" / "340 km" — coarse enough not to imply false precision. */
+export function distanceLabel(km: number): string {
+  if (!Number.isFinite(km)) return "";
+  if (km < 10) return `${km.toFixed(1)} km`;
+  return `${Math.round(km)} km`;
 }
 
 export interface ModelOption {
@@ -467,10 +504,18 @@ export function stationRowsHtml(
     .slice(0, MAX_STATION_ROWS)
     .map(({ p, i }) => {
       const sel = selected !== null && p.name === selected.name;
+      // The distance is what the list is sorted by, so it belongs on the row.
+      // Without it the order looked arbitrary — the coordinates alone gave the
+      // reader nothing to rank by, and a sorted list that cannot be seen to be
+      // sorted reads as an unsorted one.
+      const dist =
+        p.distanceKm === undefined
+          ? ""
+          : `<span class="station-dist">${esc(distanceLabel(p.distanceKm))}</span>`;
       return `
       <button class="station${sel ? " sel" : ""}" type="button" data-station="${i}">
         <span class="station-name">${esc(p.name)}${sel ? ` ${check}` : ""}</span>
-        <span class="station-sub">${esc(coordLabel(p.lat, p.lon, t))}</span>
+        <span class="station-sub">${dist}<span class="station-coord">${esc(coordLabel(p.lat, p.lon, t))}</span></span>
       </button>`;
     })
     .join("");
