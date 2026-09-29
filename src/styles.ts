@@ -817,13 +817,49 @@ input:focus-visible,
 }
 /* Pinned right-hand precip (mm) scale — stays put while the plot scrolls. */
 .chart-axis-right { flex: none; }
+/* The chart is routinely several times wider than the panel — a five-day run at
+   42px a column is ~3100px in a ~360px box — so this is the reader's only route
+   to most of the forecast, and it has to look like one.
+
+   overflow-y is CLIPPED, not visible: when one axis is a scrolling value, CSS
+   promotes "visible" on the other axis to "auto", so this box was quietly
+   reserving room for a horizontal scrollbar inside its own height. On a platform
+   with scrollbars that take space, those ~15px pushed the content past the graph
+   panel and raised a vertical scrollbar nobody needed.
+
+   (No backticks in this file's comments — the whole stylesheet is one template
+   literal, and a stray one builds a corrupted bundle without erroring.) */
 .chart-scroll {
   overflow-x: auto;
-  overflow-y: visible;
+  overflow-y: clip;
   flex: 1;
   min-width: 0;
   position: relative;
   -webkit-overflow-scrolling: touch;
+}
+/* A standing rail under the plot, on pointer devices only.
+
+   macOS gives WebKit overlay scrollbars that fade within a second of the last
+   scroll, so on a desktop there was nothing at all to say that ~89% of the
+   forecast lay to the right — it only appeared when the panel was resized.
+   Styling the scrollbar opts out of the overlay behaviour. Touch devices keep
+   the native overlay: a swipe is its own affordance there, and a permanent 8px
+   rail would cost real height on a short phone in landscape. */
+@media (hover: hover) and (pointer: fine) {
+  .chart-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: #C6D4E0 transparent;
+  }
+  .chart-scroll::-webkit-scrollbar { height: 8px; }
+  .chart-scroll::-webkit-scrollbar-track {
+    background: transparent;
+    margin: 0 2px;
+  }
+  .chart-scroll::-webkit-scrollbar-thumb {
+    background: #C6D4E0;
+    border-radius: 4px;
+  }
+  .chart-scroll::-webkit-scrollbar-thumb:hover { background: #A8BCCC; }
 }
 .chart-scroll svg text { pointer-events: none; }
 .chart-lane .chart-chip { font-size: 10px; padding: 2px 7px; border-radius: 7px; }
