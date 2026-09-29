@@ -586,13 +586,16 @@ input:focus-visible,
 .wide .stat-label { font-size: 10px; }
 .wide .stat-value { font-size: 15px; }
 
-/* Compact day chips — equal fixed width (2a: 76 px) */
+/* Compact day chips — 76 px is the FLOOR, not the width. The docked panel omits
+   the date line and every chip lands on 76; landscape keeps the date line, and a
+   chip that cannot grow clips its own text out past both rounded edges (any
+   locale whose date is wider than the box: "12 September", "12 września"). */
 .wide .day-chips { padding: 10px 14px 4px; gap: 6px; }
 .wide .day-chip {
   background: var(--paper);
   border-radius: 14px;
-  padding: 7px 6px 6px;
-  width: 76px;
+  padding: 7px 10px 6px;
+  width: auto;
   min-width: 76px;
   box-sizing: border-box;
   box-shadow: none;
@@ -699,7 +702,7 @@ input:focus-visible,
   display: grid;
   grid-template-columns: 38px 28px 1fr 0.9fr 1.3fr;
   align-items: center;
-  padding: 5px 0;
+  padding: 5px 8px;
   border-top: 1px solid var(--line-soft);
   font-size: 13.5px;
   font-variant-numeric: tabular-nums;
@@ -710,7 +713,7 @@ input:focus-visible,
   z-index: 1;
   background: rgba(252, 253, 254, 0.96);
   border-top: none;
-  padding: 4px 0 5px;
+  padding: 4px 8px 5px;
   font-size: 10px;
   letter-spacing: 0.4px;
 }
@@ -993,12 +996,13 @@ input:focus-visible,
 .sel-stat-precip { color: ${DATA_COLORS.precip}; }
 .panel-table .sel-stats { padding: 0 0 9px; }
 
-/* Hourly rows shared by the mobile selected-day card (46/34 grid) */
+/* Hourly rows shared by the mobile selected-day card (46/34 grid). The side
+   padding clears the "now" rail below — see .hrow-now. */
 .hrow {
   display: grid;
   grid-template-columns: 46px 34px 1fr 1fr 1.2fr;
   align-items: center;
-  padding: 5px 0;
+  padding: 5px 8px;
   border-top: 1px solid var(--line-soft);
   font-size: 14px;
   font-variant-numeric: tabular-nums;
@@ -1011,10 +1015,13 @@ input:focus-visible,
   background: var(--aurora-haze);
   box-shadow: inset 2px 0 0 var(--aurora);
 }
+/* The rail is a marker beside the hour, not a stroke through it: every row —
+   marked or not, header included — carries the same 8px gutter, so the rail has
+   room to read and no column shifts when the marker moves down the table. */
 .hrow-now .h-time { color: var(--aurora); font-weight: 900; }
 .hrow-head {
   border-top: none;
-  padding: 4px 0 8px;
+  padding: 4px 8px 8px;
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.5px;

@@ -32,8 +32,10 @@ export interface ModelOption {
 export interface DayGroup {
   /** "Í dag" / "Á morgun" / capitalized weekday */
   name: string;
-  /** "8. júlí" */
+  /** "8. júlí" — the card header, which has the room for a full month name */
   date: string;
+  /** "8. júl" — the day chip, which is a ~76px box and does not */
+  dateShort: string;
   maxC: number | null;
   minC: number | null;
   windMean: number | null;
@@ -95,6 +97,7 @@ export function groupDays(
     groups.push({
       name,
       date: t.dateLabel(d.getUTCDate(), t.months[d.getUTCMonth()]),
+      dateShort: t.dateLabel(d.getUTCDate(), t.monthsShort[d.getUTCMonth()]),
       maxC: temps.length ? Math.round(Math.max(...temps)) : null,
       minC: temps.length ? Math.round(Math.min(...temps)) : null,
       windMean: winds.length
@@ -346,7 +349,9 @@ export function dayChipsHtml(
   const chips = days
     .map((d, i) => {
       const sel = i === selected;
-      const date = showDate ? `<div class="dc-date">${esc(d.date)}</div>` : "";
+      const date = showDate
+        ? `<div class="dc-date">${esc(d.dateShort)}</div>`
+        : "";
       return `
       <button class="day-chip${sel ? " sel" : ""}" type="button" data-day="${i}">
         <div class="dc-name">${esc(d.name)}</div>
