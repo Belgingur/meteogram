@@ -7,7 +7,12 @@ import {
   stationDataUrl,
   type ApiOptions,
 } from "./api";
-import { indexAtInstant, nowIndex, renderGraphCard } from "./graph-card";
+import {
+  forecastSpanLabel,
+  indexAtInstant,
+  nowIndex,
+  renderGraphCard,
+} from "./graph-card";
 import { labels, type Labels } from "./i18n";
 import {
   coordLabel,
@@ -830,7 +835,7 @@ export class BelMeteogram extends HTMLElement {
     const t = this.t;
     const head = `
       <div class="head">
-        <div class="title">${esc(t.nextHours(this.points.length || this.hours))}</div>
+        <div class="title">${esc(forecastSpanLabel(this.points, t) || t.nextHours(this.hours))}</div>
         <div class="hint">${esc(t.swipe)}</div>
       </div>`;
 

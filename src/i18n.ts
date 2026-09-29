@@ -1,5 +1,16 @@
 export interface Labels {
   nextHours: (h: number) => string;
+  /**
+   * Headline for the run a chart is showing: how many days it spans and the
+   * date it reaches.
+   *
+   * Replaces counting hours off `nextHours`. That counted POINTS rather than
+   * intervals — a 121-point hourly run read "Next 121 hours" for 120 hours of
+   * forecast — said "next" about a series that starts at the analysis time and
+   * therefore includes hours already gone, and asked the reader to divide by 24
+   * in their head. Each locale owns its own plural rule.
+   */
+  forecastSpan: (days: number, end: string) => string;
   swipe: string;
   legTemp: string;
   legPrecip: string;
@@ -56,6 +67,7 @@ export interface Labels {
 
 const is: Labels = {
   nextHours: (h) => `Næstu ${h} klst.`,
+  forecastSpan: (d, end) => `${d} ${d === 1 ? "dagur" : "dagar"} · til ${end}`,
   swipe: "strjúktu til hliðar →",
   legTemp: "Hiti (°C)",
   legPrecip: "Úrkoma (mm)",
@@ -113,6 +125,7 @@ const is: Labels = {
 
 const en: Labels = {
   nextHours: (h) => `Next ${h} hours`,
+  forecastSpan: (d, end) => `${d} ${d === 1 ? "day" : "days"} · to ${end}`,
   swipe: "swipe sideways →",
   legTemp: "Temp (°C)",
   legPrecip: "Precip (mm)",
@@ -175,6 +188,7 @@ const en: Labels = {
 // few UI verbs are best-effort).
 const es: Labels = {
   nextHours: (h) => `Próximas ${h} h`,
+  forecastSpan: (d, end) => `${d} ${d === 1 ? "día" : "días"} · hasta ${end}`,
   swipe: "desliza de lado →",
   legTemp: "Temp. (°C)",
   legPrecip: "Precip. (mm)",
@@ -232,6 +246,7 @@ const es: Labels = {
 
 const pt: Labels = {
   nextHours: (h) => `Próximas ${h} h`,
+  forecastSpan: (d, end) => `${d} ${d === 1 ? "dia" : "dias"} · até ${end}`,
   swipe: "deslize para o lado →",
   legTemp: "Temp. (°C)",
   legPrecip: "Precip. (mm)",
@@ -289,6 +304,7 @@ const pt: Labels = {
 
 const pl: Labels = {
   nextHours: (h) => `Następne ${h} godz.`,
+  forecastSpan: (d, end) => `${d} ${d === 1 ? "dzień" : "dni"} · do ${end}`,
   swipe: "przesuń w bok →",
   legTemp: "Temp. (°C)",
   legPrecip: "Opad (mm)",
@@ -346,6 +362,7 @@ const pl: Labels = {
 
 const fo: Labels = {
   nextHours: (h) => `Næstu ${h} tímar`,
+  forecastSpan: (d, end) => `${d} ${d === 1 ? "dagur" : "dagar"} · til ${end}`,
   swipe: "strúka til viðrar →",
   legTemp: "Hiti (°C)",
   legPrecip: "Avfall (mm)",
