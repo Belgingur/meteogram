@@ -6,6 +6,7 @@ import {
   LAYOUT_COMPACT,
   LAYOUT_FULL,
   tempColor,
+  wireStickyDayLabels,
   wireTapToScrub,
 } from "./render";
 import { symbolUrl } from "./symbols";
@@ -269,6 +270,7 @@ export function renderGraphCard(
   // cursor a lead-in from the left keeps the past reachable by scrolling back
   // while spending the card on what the card is for.
   const scroller = host.querySelector<HTMLElement>(".scroll")!;
+  wireStickyDayLabels(scroller);
   let anchored = false;
   const anchorCursor = (): void => {
     if (anchored) return;

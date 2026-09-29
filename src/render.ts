@@ -347,6 +347,9 @@ export function formatPrecipTick(mm: number): string {
   return `${mm}`;
 }
 
+/** Gap between a day's left divider and its header text. */
+export const DAY_LABEL_PAD = 8;
+
 /** How far a touch may travel and still count as a tap rather than a pan. */
 const TAP_SLOP_PX = 10;
 /** How long a touch may rest and still count as a tap rather than a hold. */
@@ -386,6 +389,48 @@ export function wireTapToScrub(
     if (moved > TAP_SLOP_PX || Date.now() - from.at > TAP_MAX_MS) return;
     scrubFrom(e);
   });
+}
+
+/**
+ * Keep each day's header inside the visible part of its own day.
+ *
+ * The plot scrolls horizontally inside its container while the day labels ride
+ * in the SVG, so a label anchored to its day's left edge slides out through the
+ * viewport's left edge the moment the reader scrolls into that day — which is
+ * what left a clipped fragment of a weekday name ("rz" for "Sob. 12 wrz") in the
+ * top-left corner, reading as a rendering fault rather than as a label.
+ *
+ * Each label now travels along its own day: it starts at the day's left edge,
+ * follows the viewport while that day is on screen, and stops short of the next
+ * day's divider so two headers never meet. The clamp bounds are baked into the
+ * element as data attributes when the SVG is built, so this re-derives no chart
+ * geometry on scroll.
+ *
+ * Shared by both chart builders — the docked panel and the phone card have the
+ * same scrolling plot, and had the same bug.
+ */
+export function wireStickyDayLabels(
+  scroll: HTMLElement,
+  displayScale: () => number = () => 1,
+): void {
+  const labels = Array.from(
+    scroll.querySelectorAll<SVGTextElement>("text.day-label"),
+  );
+  if (!labels.length) return;
+  const place = (): void => {
+    const scale = displayScale() || 1;
+    const left = scroll.scrollLeft / scale;
+    for (const el of labels) {
+      const x0 = Number(el.dataset.x0);
+      const x1 = Number(el.dataset.x1);
+      if (!Number.isFinite(x0) || !Number.isFinite(x1)) continue;
+      // A sliver of a day can leave no room to travel; pin it to its own edge.
+      const x = Math.min(Math.max(x0, left + DAY_LABEL_PAD), Math.max(x0, x1));
+      el.setAttribute("x", String(x));
+    }
+  };
+  scroll.addEventListener("scroll", place, { passive: true });
+  place();
 }
 
 /**
@@ -598,13 +643,21 @@ export function buildMeteogram(
       : t.dayLabel(cap, d.getUTCDate(), t.months[d.getUTCMonth()]);
     // Skip the label when its day span is too narrow to hold the text — the
     // first/last day can be a sliver near midnight and would otherwise overlap
-    // the neighbouring day header (task C1).
+    // the neighbouring day header.
     const nextStart = k + 1 < dayStarts.length ? dayStarts[k + 1] : n;
     const availPx = (nextStart - i) * L.colW - 8;
     const estTextPx = label.length * L.dayFont * 0.6;
     if (estTextPx <= availPx) {
+      const x0 = (i > 0 ? cx(i) : L.padL) + 6;
+      // Made sticky within its own day after mount by wireStickyDayLabels
+      // (below), which reads these bounds. Anchored to the day's left edge
+      // alone, the header scrolls out through the viewport's left edge and
+      // leaves a clipped fragment of a weekday name in the corner.
       parts.push(
-        text(L.padL + i * L.colW + 6, L.dayLabelY, label, "#6B7A86", L.dayFont, 800),
+        text(x0, L.dayLabelY, label, "#6B7A86", L.dayFont, 800).replace(
+          "<text ",
+          `<text class="day-label" data-x0="${x0}" data-x1="${(nextStart < n ? cx(nextStart) : L.padL + n * L.colW) - 6 - estTextPx}" `,
+        ),
       );
     }
   }
