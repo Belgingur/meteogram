@@ -967,7 +967,31 @@ input:focus-visible,
 }
 .sel-title { font-size: 15px; font-weight: 900; color: var(--ink); }
 .sel-date { font-weight: 700; color: var(--haze); font-size: 12px; }
-.sel-wind { font-size: 12.5px; font-weight: 800; color: var(--haze); }
+/* Day summary: one labelled stat per column of the table underneath, laid out on
+   the same rhythm so the eye reads each figure as the heading of its column. */
+.sel-stats {
+  display: flex;
+  gap: 18px;
+  padding: 2px 0 10px;
+  border-bottom: 1px solid var(--line-soft);
+  margin-bottom: 4px;
+}
+.sel-stat { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.sel-stat-label {
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--haze);
+}
+.sel-stat-value {
+  font-size: 13.5px;
+  font-weight: 800;
+  color: var(--ink);
+  white-space: nowrap;
+}
+.sel-stat-precip { color: ${DATA_COLORS.precip}; }
+.panel-table .sel-stats { padding: 0 0 9px; }
 
 /* Hourly rows shared by the mobile selected-day card (46/34 grid) */
 .hrow {

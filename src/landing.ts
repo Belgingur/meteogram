@@ -37,6 +37,8 @@ export interface DayGroup {
   maxC: number | null;
   minC: number | null;
   windMean: number | null;
+  /** Total precipitation over the day, mm. */
+  precipMm: number;
   /** Symbol codes at local hours 03 / 09 / 15 / 21 (missing hours skipped) */
   icons: string[];
   /** Representative midday symbol (≈ 15:00) for chips and the day summary */
@@ -98,6 +100,10 @@ export function groupDays(
       windMean: winds.length
         ? Math.round(winds.reduce((a, b) => a + b, 0) / winds.length)
         : null,
+      precipMm: hours.reduce(
+        (sum, p) => sum + (Number.isFinite(p.precipMm) ? p.precipMm : 0),
+        0,
+      ),
       icons: [3, 9, 15, 21]
         .map((h) => hours.find((p) => p.local.getUTCHours() === h)?.symbol ?? "")
         .filter(Boolean),
@@ -353,6 +359,30 @@ export function dayChipsHtml(
   return `<div class="day-chips">${chips}</div>`;
 }
 
+/**
+ * The day's summary, one labelled stat per column the table below carries.
+ *
+ * This header used to show a bare "3 m/s" in its top-right corner: the day's
+ * mean wind, with nothing to say so, and no counterpart for the temperature or
+ * precipitation columns sitting right beside it. A single unexplained number is
+ * worse than none — readers reasonably took it for a current reading. Naming it
+ * and giving the other two lanes the same treatment makes the row a summary of
+ * the table rather than a stray figure.
+ */
+function dayStatsHtml(d: DayGroup, t: Labels): string {
+  const stat = (label: string, value: string): string =>
+    `<div class="sel-stat"><span class="sel-stat-label">${esc(label)}</span><span class="sel-stat-value">${value}</span></div>`;
+  const range = tempRange(d.maxC, d.minC, " / ");
+  const rain = d.precipMm > 0.05 ? `${d.precipMm.toFixed(1)} mm` : "–";
+  const wind = d.windMean === null ? "–" : `${d.windMean} m/s`;
+  return `
+        <div class="sel-stats">
+          ${stat(t.tempCol, range)}
+          ${stat(t.precip, `<span class="sel-stat-precip">${rain}</span>`)}
+          ${stat(t.wind, wind)}
+        </div>`;
+}
+
 /** Mobile selected-day card: header + full 24-row hourly table */
 export function selDayCardHtml(d: DayGroup, t: Labels): string {
   const nowRow = nowRowMarker(d.hours);
@@ -363,8 +393,7 @@ export function selDayCardHtml(d: DayGroup, t: Labels): string {
     <div class="sel-card">
       <div class="sel-head">
         <div class="sel-title">${esc(d.name)} <span class="sel-date">${esc(d.date)}</span></div>
-        <div class="sel-wind">${d.windMean ?? "–"} m/s</div>
-      </div>
+      </div>${dayStatsHtml(d, t)}
       ${hourHeadRow("hrow", t)}
       ${rows}
     </div>`;
@@ -379,8 +408,11 @@ export function panelTableHtml(d: DayGroup, t: Labels): string {
   const rows = d.hours
     .map((p) => `<div class="hrow-p${nowRow(p)}">${hourCells(p, 22)}</div>`)
     .join("");
+  // The same day summary the phone card carries. It was mobile-only before, so
+  // the two tables disagreed about whether a day has a headline at all.
   return `
     <div class="panel-table">
+      ${dayStatsHtml(d, t)}
       ${hourHeadRow("hrow-p hrow-sticky", t)}
       ${rows}
     </div>`;
