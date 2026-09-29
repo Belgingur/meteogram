@@ -975,8 +975,18 @@ export class BelMeteogram extends HTMLElement {
     const places = this.placeList(lat, lon);
     const place = this.placeName(places, lat, lon, t);
     const model = models.find((m) => m.id === this.forecastId) ?? models[0];
+    // Matched on position, not on the displayed name. With `prefer-coordinates`
+    // (which Mimir always sets) the header shows a coordinate, so a name
+    // comparison never matched and NO station ever showed its check-mark — not
+    // even the one the reader had just picked from this list. A tolerance of
+    // ~1e-4° is about 10m: close enough to mean "this station", far enough not
+    // to claim an arbitrary map click as one.
     const selectedPlace: Place | null =
-      places.find((p) => p.name === place) ?? null;
+      places.find(
+        (p) => Math.abs(p.lat - lat) < 1e-4 && Math.abs(p.lon - lon) < 1e-4,
+      ) ??
+      places.find((p) => p.name === place) ??
+      null;
     const closable = this.hasAttribute("closable");
     const { landscape, wide, expanded } = this.layoutFlags();
 
