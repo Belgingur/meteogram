@@ -6,6 +6,7 @@ import {
   LAYOUT_COMPACT,
   LAYOUT_FULL,
   tempColor,
+  wireTapToScrub,
 } from "./render";
 import { symbolUrl } from "./symbols";
 import type { HourPoint } from "./types";
@@ -134,8 +135,11 @@ function laneChip(translateY: number, swatch: string, label: string): string {
 
 /**
  * Render the full graph card into `host` and wire the scrubber.
- * Mouse hover anywhere over the SVG moves the cursor; on touch only the
- * strip around the track scrubs (the rest of the chart scrolls).
+ *
+ * Mouse hover anywhere over the SVG moves the cursor. On touch, a tap anywhere
+ * on the plot picks that hour and a drag along the strip around the track
+ * scrubs continuously; dragging elsewhere pans the chart, which is several
+ * screens wide.
  */
 export function renderGraphCard(
   host: HTMLElement,
@@ -323,7 +327,17 @@ export function renderGraphCard(
     if (e.pointerType === "mouse") scrubFrom(e);
   });
 
-  // Touch: only the strip around the track accepts drags
+  // Touch: a TAP anywhere on the plot picks that hour.
+  //
+  // Dragging still has to pan the chart — it is several screens wide — so the
+  // plot cannot simply become a scrub surface. But that left the drag strip
+  // around the track as the only way in: a 30px band with no affordance, found
+  // only by accident, asking for precision from exactly the readers least able
+  // to give it. A tap costs the pan nothing (a pan is a drag) and makes the
+  // obvious gesture — touching the hour you want — work.
+  wireTapToScrub(svgEl, scrubFrom);
+
+  // …and dragging along the strip around the track still scrubs continuously.
   const hit = host.querySelector(".scrub-hit") as SVGRectElement;
   hit.addEventListener("pointerdown", (e) => {
     try {
