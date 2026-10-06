@@ -1,6 +1,6 @@
 {
   "name": "bel-meteogram",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Belgingur meteogram widget — a framework-agnostic web component, embeddable inline, as a docked map panel or as a bottom sheet.",
   "type": "module",
   "main": "dist/bel-meteogram.js",
