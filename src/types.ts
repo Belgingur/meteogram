@@ -29,14 +29,17 @@ export interface MeteoConfigResponse {
 export interface MeteogramData {
   time: string[];
   data: { [variableName: string]: (number | null)[] };
-  meta: { [metaVariable: string]: number };
-  /** Model run / analysis time (ISO 8601, UTC). Shown as "Greiningartími".
-   *  Distinct from the first forecast step in `time[0]`, which is typically the
-   *  analysis time plus the lead offset. */
-  analysis_time?: string;
-  /** When the response was produced/updated (ISO 8601, UTC). Preferred over the
-   *  HTTP Last-Modified header for the "last update" line when present. */
-  last_modified?: string;
+  meta: {
+    /** Minutes the location's timezone is ahead of UTC. */
+    location_timezone_offset?: number;
+    /** Model run / analysis time (ISO 8601). Shown as "Greiningartími".
+     *  Distinct from the first forecast step in `time[0]`, which is typically
+     *  the analysis time plus the lead offset. */
+    analysis?: string;
+    /** When the forecast data was last updated (ISO 8601). Preferred over the
+     *  HTTP Last-Modified header for the "last update" line. */
+    last_modified?: string;
+  };
 }
 
 /** One hour of forecast, ready for rendering */

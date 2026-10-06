@@ -13,7 +13,7 @@ function makeApi(
   const time = Array.from({ length: steps }, (_, i) =>
     new Date(start + i * stepH * 3_600_000).toISOString(),
   );
-  const meta: { [k: string]: number } = {};
+  const meta: MeteogramData["meta"] = {};
   if (offsetMin !== undefined) meta.location_timezone_offset = offsetMin;
   return { time, data, meta };
 }

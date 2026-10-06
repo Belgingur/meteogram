@@ -106,3 +106,35 @@ export async function loadMeteogramData(
     lastModified: lastMod ? new Date(lastMod) : null,
   };
 }
+
+/** The run and update times shown in the widget's footer. */
+export interface RunTimes {
+  analysisTime: Date | null;
+  lastModified: Date;
+}
+
+/**
+ * Read the model run and last-update times from a meteogram.json response.
+ * Older WOD servers send neither in `meta`, so "last update" falls back to the
+ * HTTP Last-Modified header and the run time to the first forecast step — which
+ * runs an hour or so late whenever the forecast lead isn't zero.
+ */
+export function runTimes(
+  data: MeteogramData,
+  headerLastModified: Date | null,
+  firstStepMs: number | undefined,
+  now: Date = new Date(),
+): RunTimes {
+  const lastModified =
+    parseTime(data.meta?.last_modified) ?? headerLastModified ?? now;
+  const analysisTime =
+    parseTime(data.meta?.analysis) ??
+    (firstStepMs !== undefined ? new Date(firstStepMs) : lastModified);
+  return { analysisTime, lastModified };
+}
+
+function parseTime(iso: string | undefined): Date | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  return isNaN(d.getTime()) ? null : d;
+}

@@ -4,6 +4,7 @@ import {
   loadConfig,
   loadForecastMetadata,
   loadMeteogramData,
+  runTimes,
   stationDataUrl,
   type ApiOptions,
 } from "./api";
@@ -618,10 +619,8 @@ export class BelMeteogram extends HTMLElement {
   }
 
   private metaLine(t: Labels): string {
-    // A host (Mímir) can pass the authoritative model run / update time from its
-    // own manifest via the `analysis-time` / `last-updated` attributes (ISO,
-    // UTC). Those win over values derived from the widget's own meteogram.json,
-    // which may not carry them reliably.
+    // A host can override the model run / update time read from meteogram.json
+    // with the `analysis-time` / `last-updated` attributes (ISO 8601).
     const anaAttr = this.getAttribute("analysis-time");
     const anaDate = anaAttr ? new Date(anaAttr) : this.analysisTime;
     const updAttr = this.getAttribute("last-updated");
@@ -777,18 +776,13 @@ export class BelMeteogram extends HTMLElement {
       this.points = toHourPoints(data.data, windowH);
       const offset = data.data.meta?.location_timezone_offset;
       this.tzOffsetMin = typeof offset === "number" ? offset : null;
-      // "Last update" prefers the body's last_modified, then the HTTP header.
-      this.lastModified = data.data.last_modified
-        ? new Date(data.data.last_modified)
-        : (data.lastModified ?? new Date());
-      // "Greiningartími" is the model run / analysis time. Use the response's
-      // analysis_time (UTC ISO) when present; the old fallback to points[0] (the
-      // first forecast step) was an hour off whenever the forecast lead ≠ 0.
-      this.analysisTime = data.data.analysis_time
-        ? new Date(data.data.analysis_time)
-        : this.points.length > 0
-          ? new Date(this.points[0].utcMs)
-          : this.lastModified;
+      const times = runTimes(
+        data.data,
+        data.lastModified,
+        this.points[0]?.utcMs,
+      );
+      this.analysisTime = times.analysisTime;
+      this.lastModified = times.lastModified;
       this.status = this.points.length ? "ready" : "error";
       this.paint();
       this.emitStatus(this.points.length ? undefined : "empty forecast");
