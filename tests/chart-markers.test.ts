@@ -9,7 +9,13 @@ import {
   resolveChartLayout,
 } from "../src/map-panel-graph";
 import { nowMarkerIndex } from "../src/graph-card";
-import { buildMeteogram, windMax } from "../src/render";
+import {
+  buildMeteogram,
+  LAYOUT_FULL,
+  NIGHT_FILL,
+  nightBands,
+  windMax,
+} from "../src/render";
 import { weatherSymbolCode } from "../src/symbol-code";
 import type { HourPoint } from "../src/types";
 
@@ -177,5 +183,42 @@ describe("panel chart wind scale", () => {
     const top = Math.min(...ys);
     // 12..26.4 m/s: only the true peak may sit on the highest y.
     expect(ys.filter((y) => y === top).length).toBeLessThan(ys.length / 5);
+  });
+});
+
+/**
+ * Night bands were drawn by the desktop panel chart only, so the phone chart
+ * gave no hint of which hours were dark.
+ */
+describe("night shading", () => {
+  /** x of every night band rect in an SVG, in order. */
+  const nightXs = (svg: string): number[] =>
+    [...svg.matchAll(/<rect x="([\d.]+)"[^>]*fill="([^"]+)"\/>/g)]
+      .filter((m) => m[2] === NIGHT_FILL)
+      .map((m) => Number(m[1]));
+  // 09:00 + 13 h is 22:00, the first night hour; 05:00 (i = 20) is day again.
+  // The series ends at 00:00 two days on, inside the next night (from i = 37).
+  const NIGHT_STARTS = [13, 37];
+
+  it("shades 22:00–05:00 on the phone chart", () => {
+    const { svg } = buildMeteogram(POINTS, labels("is"), 5);
+    const L = LAYOUT_FULL;
+    const band = svg.match(/<rect x="([\d.]+)" y="([\d.]+)" width="([\d.]+)" height="([\d.]+)" fill="rgba\(90,112,140,0\.055\)"\/>/);
+
+    expect(nightXs(svg)).toEqual(NIGHT_STARTS.map((i) => L.padL + i * L.colW));
+    expect(Number(band?.[3])).toBe(7 * L.colW);
+    expect(Number(band?.[2])).toBe(L.dayTop);
+  });
+
+  it("shades the same hours on the panel chart", () => {
+    const L = CHART_EXPANDED;
+    const svg = chartBlock(POINTS, labels("is"), 5, 3, 0, L, false);
+
+    expect(nightXs(svg)).toEqual(NIGHT_STARTS.map((i) => i * L.colW));
+  });
+
+  it("runs a band that is still night at the last column to the chart's end", () => {
+    const points = hours(Date.UTC(2026, 8, 17, 20), 5); // 20:00 … 00:00
+    expect(nightBands(points, 10)).toEqual([{ x: 20, w: 30 }]);
   });
 });
