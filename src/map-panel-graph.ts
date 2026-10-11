@@ -16,6 +16,8 @@ import {
   formatWindTick,
   hasGustSeries,
   maxLabelsFor,
+  NIGHT_FILL,
+  nightBands,
   PRECIP_TICK_COLOR,
   precipTicksFor,
   temperatureTicks,
@@ -267,11 +269,6 @@ function linePath(
   return path.trim();
 }
 
-function isNightHour(p: HourPoint): boolean {
-  const h = p.local.getUTCHours();
-  return h < 5 || h >= 22;
-}
-
 function dayHeaderLabel(p: HourPoint, t: Labels): string {
   const d = p.local;
   const wd = t.weekdays[d.getUTCDay()];
@@ -279,27 +276,6 @@ function dayHeaderLabel(p: HourPoint, t: Labels): string {
   const mon = t.monthsShort[d.getUTCMonth()];
   const day = String(d.getUTCDate()).padStart(2, "0");
   return `${cap} ${day} ${mon}`;
-}
-
-function nightBands(
-  points: HourPoint[],
-  L: ChartLayout,
-): { x: number; w: number }[] {
-  const bands: { x: number; w: number }[] = [];
-  let start: number | null = null;
-  for (let i = 0; i < points.length; i++) {
-    const night = isNightHour(points[i]);
-    if (night && start === null) start = i;
-    if ((!night || i === points.length - 1) && start !== null) {
-      const end = night && i === points.length - 1 ? i + 1 : i;
-      bands.push({
-        x: start * L.colW,
-        w: (end - start) * L.colW,
-      });
-      start = null;
-    }
-  }
-  return bands;
 }
 
 /**
@@ -467,9 +443,9 @@ function buildPlotSvg(
     `<rect x="0" y="${L.plotTop}" width="${width}" height="${L.plotBottom - L.plotTop}" fill="#FCFDFE"/>`,
   ];
 
-  for (const b of nightBands(points, L)) {
+  for (const b of nightBands(points, L.colW)) {
     parts.push(
-      `<rect x="${b.x}" y="${L.plotTop}" width="${b.w}" height="${L.plotBottom - L.plotTop}" fill="rgba(90,112,140,0.055)"/>`,
+      `<rect x="${b.x}" y="${L.plotTop}" width="${b.w}" height="${L.plotBottom - L.plotTop}" fill="${NIGHT_FILL}"/>`,
     );
   }
 

@@ -166,6 +166,37 @@ export function hasGustSeries(points: HourPoint[]): boolean {
   return points.some((p) => p.gustMs !== null);
 }
 
+/** Tint of the night bands, the same in both charts. */
+export const NIGHT_FILL = "rgba(90,112,140,0.055)";
+
+/** Night is 22:00–05:00 local time: a fixed clock window, not sunset. */
+export function isNightHour(p: HourPoint): boolean {
+  const h = p.local.getUTCHours();
+  return h < 5 || h >= 22;
+}
+
+/**
+ * Runs of night columns, as offsets and widths from the first column's left
+ * edge. Both charts shade them behind everything else.
+ */
+export function nightBands(
+  points: HourPoint[],
+  colW: number,
+): { x: number; w: number }[] {
+  const bands: { x: number; w: number }[] = [];
+  let start: number | null = null;
+  for (let i = 0; i < points.length; i++) {
+    const night = isNightHour(points[i]);
+    if (night && start === null) start = i;
+    if ((!night || i === points.length - 1) && start !== null) {
+      const end = night && i === points.length - 1 ? i + 1 : i;
+      bands.push({ x: start * colW, w: (end - start) * colW });
+      start = null;
+    }
+  }
+  return bands;
+}
+
 // Temperature color rule: > 0 °C red, < 0 °C blue, exactly 0 °C neutral.
 // The hues come from DATA_COLORS so this table agrees with both charts.
 export function tempColor(t: number): string {
@@ -603,6 +634,14 @@ export function buildMeteogram(
   const { ty, wy, ph } = s;
 
   const parts: string[] = [];
+
+  // Night bands first, behind everything, from the symbol row down to the
+  // wind arrows like the day dividers.
+  for (const b of nightBands(points, L.colW)) {
+    parts.push(
+      `<rect x="${L.padL + b.x}" y="${L.dayTop}" width="${b.w}" height="${L.dayBottom - L.dayTop}" fill="${NIGHT_FILL}"/>`,
+    );
+  }
 
   // Gridlines only — the tick LABELS live in the pinned axis strips, driven by
   // these same scale closures. Lines span the full plot from x=0: there is no
