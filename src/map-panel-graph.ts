@@ -19,6 +19,9 @@ import {
   NIGHT_FILL,
   nightBands,
   PRECIP_TICK_COLOR,
+  precipLaneShare,
+  type PrecipScale,
+  precipScaleMm,
   precipTicksFor,
   temperatureTicks,
   TEMP_LABEL_CAP,
@@ -82,6 +85,10 @@ interface ChartLayout {
   precipBase: number;
   precipPerMm: number;
   precipCap: number;
+  /** Filled by resolveChartLayout: the mm the lane reaches at its top (precipScaleMm) */
+  precipTopMm: number;
+  /** Filled by resolveChartLayout from the lane's scale and height */
+  precipTicks: number[];
   precipMaxW: number;
   precipW: number;
   symbolScale: number;
@@ -165,6 +172,8 @@ export const CHART_COMPACT: ChartLayout = {
   windTicks: [5, 10],
   precipPerMm: 22,
   precipCap: 44,
+  precipTopMm: 2,
+  precipTicks: [1, 2],
   precipMaxW: 16,
   precipW: 10,
   symbolScale: 0.58,
@@ -201,6 +210,8 @@ export const CHART_EXPANDED: ChartLayout = {
   windTicks: [5, 10, 15, 20],
   precipPerMm: 40,
   precipCap: 84,
+  precipTopMm: 2.1,
+  precipTicks: [1, 2],
   precipMaxW: 18,
   precipW: 12,
   symbolScale: 0.82,
@@ -334,6 +345,13 @@ export function resolveChartLayout(
   // edge — a storm read as a plateau here and as a peak on the phone chart,
   // which has always scaled to the data with the same rule.
   const wMax = Math.max(base.windMax, windMax(points));
+  // Same floor-not-ceiling rule for precipitation: the layout holds ~2mm, and a
+  // wetter forecast raises the lane's top rather than cutting its bars off there.
+  const precipBaseMm = base.precipCap / base.precipPerMm;
+  const precip: PrecipScale = {
+    baseMm: precipBaseMm,
+    topMm: precipScaleMm(points, precipBaseMm),
+  };
   return {
     ...base,
     tempLo: lo,
@@ -343,6 +361,8 @@ export function resolveChartLayout(
     // Derived from the shared tick rule rather than hardcoded per layout, so the
     // wind scale reads the same here as on the mobile chart.
     windTicks: windTicksFor(wMax, windLanePx),
+    precipTopMm: precip.topMm,
+    precipTicks: precipTicksFor(precip, base.precipCap * scale),
   };
 }
 
@@ -350,7 +370,20 @@ export function resolveChartLayout(
 function sameTicks(a: ChartLayout, b: ChartLayout): boolean {
   const same = (x: number[], y: number[]): boolean =>
     x.length === y.length && x.every((v, i) => v === y[i]);
-  return same(a.tempTicks, b.tempTicks) && same(a.windTicks, b.windTicks);
+  return (
+    same(a.tempTicks, b.tempTicks) &&
+    same(a.windTicks, b.windTicks) &&
+    same(a.precipTicks, b.precipTicks)
+  );
+}
+
+/** Bar height for an amount in this layout's precipitation lane. */
+function precipHeight(L: ChartLayout): (mm: number) => number {
+  const scale: PrecipScale = {
+    baseMm: L.precipCap / L.precipPerMm,
+    topMm: L.precipTopMm,
+  };
+  return (mm) => L.precipCap * precipLaneShare(mm, scale);
 }
 
 function tempSpan(L: ChartLayout): number {
@@ -401,12 +434,12 @@ function buildAxisSvg(L: ChartLayout): string {
  */
 function buildRightAxisSvg(L: ChartLayout): string {
   const rightW = L.rightAxisW;
-  const ph = (mm: number): number => Math.min(L.precipCap, mm * L.precipPerMm);
+  const ph = precipHeight(L);
   const size = L.axisFont;
   const parts: string[] = [
     `<rect x="0" y="0" width="${rightW}" height="${L.height}" fill="#fff"/>`,
   ];
-  for (const mm of precipTicksFor(L.precipCap / L.precipPerMm)) {
+  for (const mm of L.precipTicks) {
     parts.push(
       text(
         5,
@@ -437,7 +470,7 @@ function buildPlotSvg(
     L.tempBase - ((v - L.tempLo) / tempSpan(L)) * (L.tempBase - L.tempTop);
   const wy = (v: number): number =>
     L.windBase - (Math.min(v, L.windMax) / L.windMax) * (L.windBase - L.windTop);
-  const ph = (mm: number): number => Math.min(L.precipCap, mm * L.precipPerMm);
+  const ph = precipHeight(L);
 
   const parts: string[] = [
     `<rect x="0" y="${L.plotTop}" width="${width}" height="${L.plotBottom - L.plotTop}" fill="#FCFDFE"/>`,
@@ -466,7 +499,7 @@ function buildPlotSvg(
     );
   }
   // Faint dashed precip gridlines (mm) so the right-hand precip scale is readable.
-  for (const mm of precipTicksFor(L.precipCap / L.precipPerMm)) {
+  for (const mm of L.precipTicks) {
     const y = L.precipBase - ph(mm);
     parts.push(
       `<line x1="0" x2="${width}" y1="${y}" y2="${y}" stroke="#CFE0F1" stroke-width="1" stroke-dasharray="2 3"/>`,

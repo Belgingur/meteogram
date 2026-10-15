@@ -3,13 +3,13 @@ import { describe, expect, it } from "vitest";
 import { labels } from "../src/i18n";
 import {
   buildMeteogram,
-  formatPrecipTick,
   LAYOUT_COMPACT,
   LAYOUT_FULL,
   type MeteogramLayout,
   PRECIP_TICK_COLOR,
   maxLabelsFor,
-  PRECIP_TICKS,
+  precipLaneShare,
+  type PrecipScale,
   precipTicksFor,
   TICK_MIN_GAP,
   TICK_LABEL_DY,
@@ -118,11 +118,10 @@ describe.each([
 
   it("puts precipitation on the RIGHT strip, in the precip blue", () => {
     const { axisSvg, rightAxisSvg } = built();
-    for (const mm of PRECIP_TICKS) {
-      const label = formatPrecipTick(mm);
-      expect(texts(rightAxisSvg).filter((e) => e.label === label)).toHaveLength(
-        1,
-      );
+    const precipLabels = texts(rightAxisSvg).map((e) => e.label);
+    expect(precipLabels.length).toBeGreaterThan(0);
+    for (const label of precipLabels) {
+      expect(precipLabels.filter((l) => l === label)).toHaveLength(1);
       // ...and not in the left strip, where it used to collide with temp ticks.
       expect(texts(axisSvg).filter((e) => e.label === label)).toHaveLength(0);
     }
@@ -183,36 +182,58 @@ describe("windTicksFor — the shared wind tick rule", () => {
 });
 
 describe("precipTicksFor — the precipitation ladder", () => {
+  /** A dry run: the lane keeps the layout's own top. */
+  const dry = (baseMm: number): PrecipScale => ({ baseMm, topMm: baseMm });
+  const LANES = [26, 44, 46, 62, 84];
+  const TOPS = [2.5, 3, 4, 5, 6, 8, 10, 15, 25, 40];
+
   it("reproduces the fixed [1, 2] both charts were built around", () => {
-    // Compact caps at 44px / 22px-per-mm and fullscreen at 84 / 40 — both ~2mm.
-    expect(precipTicksFor(44 / 22)).toEqual([1, 2]);
-    expect(precipTicksFor(84 / 40)).toEqual([1, 2]);
+    // Desktop compact 44px / 22px-per-mm, expanded 84 / 40, phone 62 / 28 and
+    // 46 / 22 — every one of them ~2mm.
+    expect(precipTicksFor(dry(44 / 22), 44)).toEqual([1, 2]);
+    expect(precipTicksFor(dry(84 / 40), 84)).toEqual([1, 2]);
+    expect(precipTicksFor(dry(62 / 28), 62)).toEqual([1, 2]);
+    expect(precipTicksFor(dry(46 / 22), 46)).toEqual([1, 2]);
   });
 
-  it("never labels a millimetre the bars cannot reach", () => {
-    for (const maxMm of [0.4, 0.9, 1.5, 2, 3, 6, 12, 40]) {
-      for (const mm of precipTicksFor(maxMm)) {
-        expect(mm, `maxMm=${maxMm}`).toBeLessThanOrEqual(maxMm + 1e-9);
-        expect(mm).toBeGreaterThan(0);
+  it("still gives a scaled-down lane two labels", () => {
+    expect(precipTicksFor(dry(2), 44 * 0.6)).toEqual([1, 2]);
+  });
+
+  it("labels the top of a raised lane, and nothing the bars cannot reach", () => {
+    for (const lanePx of LANES) {
+      for (const topMm of TOPS) {
+        const ticks = precipTicksFor({ baseMm: 2, topMm }, lanePx);
+        const where = `lane ${lanePx}px, top ${topMm}mm → ${ticks.join(",")}`;
+        expect(ticks, where).toContain(topMm);
+        expect(ticks.length, where).toBeGreaterThanOrEqual(2);
+        for (const mm of ticks) {
+          expect(mm, where).toBeGreaterThan(0);
+          expect(mm, where).toBeLessThanOrEqual(topMm);
+        }
       }
     }
   });
 
-  it("keeps the ladder short and evenly stepped at any cap", () => {
-    for (const maxMm of [0.4, 1, 2, 5, 9, 20, 60]) {
-      const ticks = precipTicksFor(maxMm);
-      const where = `maxMm=${maxMm} → ${ticks.join(",")}`;
-      expect(ticks.length, where).toBeLessThanOrEqual(3);
-      if (ticks.length > 1) {
-        const step = ticks[0];
-        expect(ticks, where).toEqual(ticks.map((_, i) => (i + 1) * step));
+  it("keeps every label clear of its neighbours on screen", () => {
+    for (const lanePx of LANES) {
+      for (const topMm of [2, ...TOPS]) {
+        const s = { baseMm: 2, topMm };
+        const ys = precipTicksFor(s, lanePx).map(
+          (mm) => precipLaneShare(mm, s) * lanePx,
+        );
+        const gap = Math.min(TICK_MIN_GAP, lanePx / 2);
+        for (let i = 1; i < ys.length; i++) {
+          expect(ys[i] - ys[i - 1], `lane ${lanePx}px, top ${topMm}mm`)
+            .toBeGreaterThanOrEqual(gap - 1e-6);
+        }
       }
     }
   });
 
   it("returns nothing for a lane that cannot draw a bar", () => {
-    expect(precipTicksFor(0)).toEqual([]);
-    expect(precipTicksFor(-1)).toEqual([]);
+    expect(precipTicksFor({ baseMm: 2, topMm: 0 }, 44)).toEqual([]);
+    expect(precipTicksFor(dry(2), 0)).toEqual([]);
   });
 });
 

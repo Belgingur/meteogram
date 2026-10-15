@@ -260,6 +260,8 @@ describe("CHART_FIT_SELECTORS", () => {
     windTicks: [5, 10, 15, 20],
     precipPerMm: 40,
     precipCap: 84,
+    precipTopMm: 2.1,
+    precipTicks: [1, 2],
     precipMaxW: 18,
     precipW: 12,
     symbolScale: 0.82,
