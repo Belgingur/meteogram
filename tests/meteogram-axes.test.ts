@@ -188,11 +188,11 @@ describe("precipTicksFor — the precipitation ladder", () => {
   const TOPS = [2.5, 3, 4, 5, 6, 8, 10, 15, 25, 40];
 
   it("reproduces the fixed [1, 2] both charts were built around", () => {
-    // Desktop compact 44px / 22px-per-mm, expanded 84 / 40, phone 62 / 28 and
-    // 46 / 22 — every one of them ~2mm.
+    // Desktop compact 44px / 22px-per-mm, expanded 84 / 40, phone 100 / 28 and
+    // 46 / 22.
     expect(precipTicksFor(dry(44 / 22), 44)).toEqual([1, 2]);
     expect(precipTicksFor(dry(84 / 40), 84)).toEqual([1, 2]);
-    expect(precipTicksFor(dry(62 / 28), 62)).toEqual([1, 2]);
+    expect(precipTicksFor(dry(100 / 28), 100)).toEqual([1, 2]);
     expect(precipTicksFor(dry(46 / 22), 46)).toEqual([1, 2]);
   });
 
