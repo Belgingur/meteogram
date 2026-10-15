@@ -144,10 +144,11 @@ returns 90), so clamping by it dropped real forecast hours.
 | `location-lat` / `location-lon` | — | Point to load |
 | `location-name` | _(nearest station)_ | Display name for the location block |
 | `hours` | `48` | Graph-mode window (e.g. 48 or 72). Ignored in full mode, which takes the whole run |
-| `language` | `is` | `is` or `en` |
+| `language` | `is` | `is`, `en`, `fo`, `pl`, `es` or `pt` |
 | `mode` | `graph` | `graph` (card only) or `full` (landing experience) |
 | `view` | `table` | Initial full-mode view: `table` or `graph` |
 | `closable` | _(absent)_ | Full mode: render a ✕ over the location block; pressing it emits `bel-meteogram-close` (the host dismisses the widget) |
+| `hide-language` | _(absent)_ | Full mode: leave the language choice out of the settings overlay, for a host that sets `language` from its own language control |
 | `api-user` / `api-password` | — | Optional basic auth for the data endpoint |
 | `sample` | _(absent)_ | Render generated sample data (development/design review) |
 

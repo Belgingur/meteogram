@@ -524,6 +524,18 @@ export function stationRowsHtml(
 }
 
 /** Settings overlay (view 2): forecast model · language · location */
+/** The settings overlay's language chips, under their section label. */
+function languageSectionHtml(lang: string, t: Labels): string {
+  return `
+            <div class="section-label">${esc(t.language)}</div>
+            <div class="chips chips-langs">
+              ${LANGS.map(
+                (l) =>
+                  `<button class="chip${lang === l.code ? " on" : ""}" type="button" data-lang="${l.code}" aria-pressed="${lang === l.code}">${esc(l.name)}</button>`,
+              ).join("")}
+            </div>`;
+}
+
 export function overlayHtml(
   models: ModelOption[],
   selectedModelId: string,
@@ -532,6 +544,7 @@ export function overlayHtml(
   selected: Place | null,
   query: string,
   t: Labels,
+  showLanguage = true,
 ): string {
   const chips = models
     .map(
@@ -552,13 +565,7 @@ export function overlayHtml(
           <div class="ov-col">
             <div class="section-label">${esc(t.forecastModel)}</div>
             <div class="chips chips-models">${chips}</div>
-            <div class="section-label">${esc(t.language)}</div>
-            <div class="chips chips-langs">
-              ${LANGS.map(
-                (l) =>
-                  `<button class="chip${lang === l.code ? " on" : ""}" type="button" data-lang="${l.code}" aria-pressed="${lang === l.code}">${esc(l.name)}</button>`,
-              ).join("")}
-            </div>
+            ${showLanguage ? languageSectionHtml(lang, t) : ""}
           </div>
           <div class="ov-col ov-col--station">
             <div class="section-label">${esc(t.location)}</div>
