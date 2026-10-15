@@ -89,7 +89,14 @@ const PALETTE = Object.values(DATA_COLORS).map((c) => c.toUpperCase());
  * ink. They are allowed to be spelled in the renderer — what may not be is a
  * colour that ENCODES a reading.
  */
-const STRUCTURAL = ["#FFFFFF", "#EEF1F4", "#EAEEF1", "#DCE3E8", "#14202B"];
+const STRUCTURAL = [
+  "#FFFFFF",
+  "#EEF1F4",
+  "#EAEEF1",
+  "#DCE3E8",
+  "#CFE0F1",
+  "#14202B",
+];
 
 /** The reds and blues that used to be typed per file. */
 const RETIRED = ["#D14B4B"];

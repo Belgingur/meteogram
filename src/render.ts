@@ -81,7 +81,12 @@ export const LAYOUT_FULL: MeteogramLayout = {
   tempBottom: 140,
   precipBase: 226,
   precipPerMm: 28,
-  precipCap: 62,
+  // Reaches past the divider into the foot of the temperature lane, the way the
+  // desktop chart shares the temperature baseline. The two scales sit on
+  // opposite strips (temperature left, precipitation right) so their labels
+  // never meet, and the temperature line and its haloed labels draw over the
+  // bars. A dry week draws exactly as before: the millimetres are the same size.
+  precipCap: 100,
   precipMaxW: 20,
   precipW: 16,
   windBase: 306,
@@ -727,10 +732,13 @@ export function buildMeteogram(
       `<line x1="0" x2="${width}" y1="${ty(v)}" y2="${ty(v)}" stroke="#EEF1F4" stroke-width="1"/>`,
     );
   }
+  // Dashed and pale blue, like the desktop chart's: the precipitation lane
+  // reaches into the temperature one, where a plain grey line would read as
+  // another temperature step.
   for (const mm of s.precipTicks) {
     const y = L.precipBase - ph(mm);
     parts.push(
-      `<line x1="0" x2="${width}" y1="${y}" y2="${y}" stroke="#EEF1F4" stroke-width="1"/>`,
+      `<line x1="0" x2="${width}" y1="${y}" y2="${y}" stroke="#CFE0F1" stroke-width="1" stroke-dasharray="2 3"/>`,
     );
   }
   for (const v of s.windTicks) {
@@ -782,6 +790,11 @@ export function buildMeteogram(
     }
   }
 
+  // Lane dividers — same helper as the axis strips, so the three SVGs cannot
+  // end up with dividers at different weights or colours. Under the data: a
+  // heavy hour's bar reaches over the temperature divider, not under it.
+  parts.push(dividerLines(L, width));
+
   // Úrkoma lane: hámarksúrkoma bar behind, mean úrkoma in front
   for (let i = 0; i < n; i++) {
     const pm = points[i].precipMaxMm;
@@ -816,10 +829,6 @@ export function buildMeteogram(
       );
     }
   }
-
-  // Lane dividers — same helper as the axis strips, so the three SVGs cannot
-  // end up with dividers at different weights or colours.
-  parts.push(dividerLines(L, width));
 
   // Vindur lane: gust line first (dashed), wind line on top. The gust line is
   // omitted entirely when the dataset has no gust series.
