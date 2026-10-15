@@ -194,7 +194,10 @@ function isEditableTarget(target: EventTarget | undefined): boolean {
  *   location-lon    longitude
  *   location-name   optional display name (else nearest station is used)
  *   hours           graph window, e.g. 48 or 72 (default 48)
- *   language        "is" (default) | "en"
+ *   language        "is" (default) | "en" | "fo" | "pl" | "es" | "pt"
+ *   hide-language   full mode: leave the language choice out of the settings
+ *                   overlay — for hosts that set `language` from their own
+ *                   language control, so the two can never disagree
  *   mode            "graph" (default) | "full"
  *   view            initial full-mode view: "table" (default) | "graph"
  *   closable        full mode: render a ✕ button over the location block and
@@ -1106,7 +1109,16 @@ export class BelMeteogram extends HTMLElement {
     // descendants into page-relative ones and strand the dialog partway
     // down the scrollable content.
     const overlay = this.settingsOpen
-      ? overlayHtml(models, this.forecastId, lang, places, selectedPlace, this.query, t)
+      ? overlayHtml(
+          models,
+          this.forecastId,
+          lang,
+          places,
+          selectedPlace,
+          this.query,
+          t,
+          !this.hasAttribute("hide-language"),
+        )
       : "";
 
     const cls = `page ${wide ? "wide wide-2a" : "narrow"}${expanded ? " is-expanded" : ""}${landscape ? " is-fullscreen" : ""}${closable ? " page--closable" : ""} view-${this.view}`;
