@@ -261,31 +261,103 @@ function linePath(
 export const TICK_COLOR = DATA_COLORS.none;
 export const PRECIP_TICK_COLOR = DATA_COLORS.precipText;
 
-/** Precipitation tick + gridline values, in mm */
-export const PRECIP_TICKS: readonly number[] = [1, 2];
-
 /** Minimum vertical gap between two tick labels before they read as crowded */
 export const TICK_MIN_GAP = 22;
 
 /**
- * Precipitation ticks for a lane that can draw up to `maxMm` before its bars
- * hit their cap.
- *
- * The old fixed [1, 2] happened to be right for both charts, because both cap
- * at ~2mm — but it was fixed, so any change to `precipCap` or `precipPerMm`
- * would have left the axis labelling millimetres the bars can no longer reach,
- * or stopping short of ones they can.
+ * How a precipitation lane turns millimetres into height. Both chart renderers
+ * draw through it, so an hour of rain fills the same share of its lane on the
+ * phone chart as on the desktop one.
  */
-export function precipTicksFor(maxMm: number): number[] {
-  if (!(maxMm > 0)) return [];
-  const steps = [0.5, 1, 2, 5, 10, 20];
-  const step =
-    steps.find((s) => Math.floor(maxMm / s) <= 3) ?? steps[steps.length - 1];
-  const ticks: number[] = [];
-  for (let v = step; v <= maxMm + 1e-9; v += step) {
-    ticks.push(Number(v.toFixed(2)));
+export interface PrecipScale {
+  /** The layout's own top, `precipCap / precipPerMm` — about 2mm. */
+  baseMm: number;
+  /** What the lane reaches at its top for this forecast: `baseMm` or more. */
+  topMm: number;
+}
+
+/** Tidy lane tops, per power of ten, for {@link precipScaleMm}. */
+const PRECIP_SCALE_STEPS = [1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10];
+
+/**
+ * The millimetres a precipitation lane reaches at its top, for these points.
+ *
+ * `baseMm` — the layout's own `precipCap / precipPerMm`, about 2mm — is a
+ * floor, not a ceiling, the same rule as the wind lane. A fixed scale cut every
+ * bar above it off at the top of the lane, so 3mm and 15mm drew the same bar.
+ * When any bar is taller (the lighter max-precip bar included) the lane now
+ * reaches to hold it, rounded up to a tidy value; a drier forecast keeps the
+ * scale it always had. {@link precipLaneShare} decides where the bars in
+ * between land.
+ */
+export function precipScaleMm(points: HourPoint[], baseMm: number): number {
+  let peak = 0;
+  for (const p of points) {
+    if (Number.isFinite(p.precipMm)) peak = Math.max(peak, p.precipMm);
+    if (Number.isFinite(p.precipMaxMm)) peak = Math.max(peak, p.precipMaxMm);
   }
-  return ticks;
+  if (!(peak > baseMm)) return baseMm;
+  const magnitude = 10 ** Math.floor(Math.log10(peak));
+  const step =
+    PRECIP_SCALE_STEPS.find((s) => s * magnitude >= peak - 1e-9) ?? 10;
+  return Number((step * magnitude).toFixed(6));
+}
+
+/** The least of its lane the plain 0–`baseMm` ruler keeps, however wet the run. */
+const PRECIP_RULER_SHARE = 0.5;
+
+/**
+ * The share (0–1) of its lane that a bar of `mm` fills.
+ *
+ * One scale serves the whole run, so a straight stretch to the wettest hour
+ * let a single downpour flatten every shower around it: a 15mm Saturday shrank
+ * Thursday's 1mm to a sliver. The lane adapts to how wet the run is instead.
+ * Amounts up to `baseMm` keep a plain ruler at the bottom, and everything
+ * heavier sits above it on a log scale, where each doubling of the rain adds
+ * the same height. The ruler gives up height only as the run needs it — all of
+ * the lane in a dry run (exactly the lane it always was), two thirds of it with
+ * a 3mm top — and never more than half. So light rain stays readable, heavy
+ * rain still climbs with the amount, and no bar is cut off. Every share moves
+ * smoothly with `topMm`: a slightly wetter run never redraws the chart in a jump.
+ */
+export function precipLaneShare(mm: number, s: PrecipScale): number {
+  if (!(mm > 0)) return 0;
+  const { baseMm, topMm } = s;
+  const ruler = Math.max(PRECIP_RULER_SHARE, Math.min(1, baseMm / topMm));
+  if (mm <= baseMm || !(topMm > baseMm)) {
+    return Math.min(1, (mm / baseMm) * ruler);
+  }
+  const heavy = Math.log(mm / baseMm) / Math.log(topMm / baseMm);
+  return Math.min(1, ruler + (1 - ruler) * heavy);
+}
+
+/** Round amounts a precipitation axis may label besides its top, by priority. */
+const PRECIP_TICK_CANDIDATES = [2, 1, 5, 10, 20, 50];
+
+/**
+ * Precipitation ticks for a lane `lanePx` tall on screen, drawn with `s`.
+ *
+ * Each candidate is kept only if it clears every label already kept, in order
+ * of priority: the lane's top when the forecast raised it (a tidy value, and
+ * the one that says how far the scale now reaches), then 2 and 1 — the
+ * light-rain ruler, so a dry run still gets the [1, 2] both charts were built
+ * around — then the round amounts in between. Spacing on a wet run's lane is
+ * uneven on purpose: each label sits where its bars end.
+ */
+export function precipTicksFor(s: PrecipScale, lanePx: number): number[] {
+  if (!(s.topMm > 0) || !(lanePx > 0)) return [];
+  // A short lane (a scaled-down chart) still gets two labels, closer together.
+  const gap = Math.min(TICK_MIN_GAP, lanePx / 2) - 1e-9;
+  const raised = s.topMm > s.baseMm + 1e-9;
+  const kept: { mm: number; y: number }[] = [];
+  for (const mm of [...(raised ? [s.topMm] : []), ...PRECIP_TICK_CANDIDATES]) {
+    if (mm > s.topMm + 1e-9) continue;
+    const y = precipLaneShare(mm, s) * lanePx;
+    if (kept.every((k) => k.mm !== mm && Math.abs(k.y - y) >= gap)) {
+      kept.push({ mm, y });
+    }
+  }
+  return kept.map((k) => k.mm).sort((a, b) => a - b);
 }
 
 /**
@@ -520,6 +592,7 @@ export function meteogramWidth(
 interface MeteogramScales {
   tempTicks: number[];
   windTicks: number[];
+  precipTicks: number[];
   ty: (v: number) => number;
   wy: (v: number) => number;
   ph: (mm: number) => number;
@@ -538,12 +611,15 @@ function meteogramScales(
   const tempTicks = temperatureTicks(temps);
   const [lo, hi] = [tempTicks[0], tempTicks[tempTicks.length - 1]];
   const wMax = windMax(points);
+  const baseMm = L.precipCap / L.precipPerMm;
+  const precip = { baseMm, topMm: precipScaleMm(points, baseMm) };
   return {
     tempTicks,
     windTicks: windTicksFor(wMax, L.windSpan),
+    precipTicks: precipTicksFor(precip, L.precipCap),
     ty: (v) => L.tempTop + ((hi - v) / (hi - lo)) * (L.tempBottom - L.tempTop),
     wy: (v) => L.windBase - (Math.min(v, wMax) / wMax) * L.windSpan,
-    ph: (mm) => Math.min(L.precipCap, mm * L.precipPerMm),
+    ph: (mm) => L.precipCap * precipLaneShare(mm, precip),
   };
 }
 
@@ -585,7 +661,7 @@ function buildAxisStrip(L: MeteogramLayout, s: MeteogramScales): string {
  */
 function buildRightAxisStrip(L: MeteogramLayout, s: MeteogramScales): string {
   const parts: string[] = [dividerLines(L, L.rightAxisW)];
-  for (const mm of PRECIP_TICKS) {
+  for (const mm of s.precipTicks) {
     parts.push(
       text(
         L.axisInset,
@@ -651,7 +727,7 @@ export function buildMeteogram(
       `<line x1="0" x2="${width}" y1="${ty(v)}" y2="${ty(v)}" stroke="#EEF1F4" stroke-width="1"/>`,
     );
   }
-  for (const mm of PRECIP_TICKS) {
+  for (const mm of s.precipTicks) {
     const y = L.precipBase - ph(mm);
     parts.push(
       `<line x1="0" x2="${width}" y1="${y}" y2="${y}" stroke="#EEF1F4" stroke-width="1"/>`,
