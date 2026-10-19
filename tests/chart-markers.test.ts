@@ -64,20 +64,21 @@ const attrs = (svg: string, cls: string): Record<string, string> => {
 
 describe("panel chart markers", () => {
   const L = CHART_EXPANDED;
-  const svg = chartBlock(POINTS, labels("is"), 5, 3, 0, L, false);
+  const svg = chartBlock(POINTS, labels("is"), 5, 3, L, false);
   const cx = (i: number): number => i * L.colW + L.colW / 2;
 
-  it("puts the accent line on now and leaves the analysis time a hairline", () => {
+  it("puts the accent line on now", () => {
     const now = attrs(svg, "chart-now");
-    const ana = attrs(svg, "chart-ana");
 
     expect(now.stroke).toBe(DATA_COLORS.now);
     expect(now["stroke-dasharray"]).toBeUndefined();
     expect(Number(now.x1)).toBe(cx(3));
+  });
 
-    expect(ana.stroke).toBe(DATA_COLORS.neutral);
-    expect(ana["stroke-dasharray"]).toBe("4 3");
-    expect(Number(ana.x1)).toBe(cx(0));
+  // A run starts at its analysis time, so its marker sat on the first column
+  // and read as a stray dashed gridline at the plot's left edge.
+  it("draws no analysis-time line", () => {
+    expect(svg).not.toContain("chart-ana");
   });
 
   it("draws the day divider on the 00:00 column, not half an hour before it", () => {
@@ -142,10 +143,8 @@ describe("nowMarkerIndex", () => {
 
 describe("panel chart now marker outside the run", () => {
   it("draws no now line rather than parking one on an edge column", () => {
-    const svg = chartBlock(POINTS, labels("is"), 5, -1, 0, CHART_EXPANDED, false);
+    const svg = chartBlock(POINTS, labels("is"), 5, -1, CHART_EXPANDED, false);
     expect(svg).not.toContain("chart-now");
-    // The analysis hairline is independent of now and stays.
-    expect(svg).toContain("chart-ana");
   });
 });
 
@@ -177,7 +176,7 @@ describe("panel chart wind scale", () => {
 
   it("no longer flattens the gust peaks onto one line", () => {
     const L = resolveChartLayout(CHART_COMPACT, stormy);
-    const svg = chartBlock(stormy, labels("is"), 5, 3, 0, L, false);
+    const svg = chartBlock(stormy, labels("is"), 5, 3, L, false);
     const gust = svg.match(/<path d="([^"]+)"[^>]*stroke-dasharray="4 4"/)?.[1] ?? "";
     const ys = [...gust.matchAll(/[\d.]+[ ,]([\d.]+)/g)].map((m) => Number(m[1]));
     const top = Math.min(...ys);
@@ -212,7 +211,7 @@ describe("night shading", () => {
 
   it("shades the same hours on the panel chart", () => {
     const L = CHART_EXPANDED;
-    const svg = chartBlock(POINTS, labels("is"), 5, 3, 0, L, false);
+    const svg = chartBlock(POINTS, labels("is"), 5, 3, L, false);
 
     expect(nightXs(svg)).toEqual(NIGHT_STARTS.map((i) => i * L.colW));
   });

@@ -460,7 +460,6 @@ function buildPlotSvg(
   t: Labels,
   scrubIdx: number,
   nowIdx: number,
-  anaIdx: number,
   L: ChartLayout,
 ): { svg: string; geo: ChartGeometry } {
   const n = points.length;
@@ -671,13 +670,9 @@ function buildPlotSvg(
     parts.push(text(cx(i), L.hourLabelY, hh, DATA_COLORS.neutral, L.hourLabelSize, 700, "middle"));
   }
 
-  const anaX = cx(Math.max(0, Math.min(n - 1, anaIdx)));
-  // "Now" is the line a reader looks for, so it carries the accent; the analysis
-  // time is context (and usually the chart's own left edge, since a run starts
-  // there), so it stays a quiet dashed hairline.
-  parts.push(
-    `<line class="chart-ana" x1="${anaX}" x2="${anaX}" y1="${L.plotTop}" y2="${L.plotBottom}" stroke="${DATA_COLORS.neutral}" stroke-width="1.2" stroke-dasharray="4 3"/>`,
-  );
+  // No analysis-time marker: a run starts at its analysis time, so the line
+  // sat on the plot's first column, where it read as a stray gridline rather
+  // than as information. The meta line already states the analysis time.
   // -1 (now outside the run) draws no marker rather than parking one on an
   // edge column, where it would label a stale or future hour as "now".
   if (nowIdx >= 0 && nowIdx < n) {
@@ -732,7 +727,6 @@ export interface MapPanelGraphOptions {
   scrubIdx: number;
   /** Column holding "now"; -1 when now is outside the run (no marker) */
   nowIdx: number;
-  anaIdx: number;
   onScrub: (idx: number) => void;
   onFullscreen?: () => void;
   fullscreen?: boolean;
@@ -853,14 +847,13 @@ export function chartBlock(
   t: Labels,
   scrubIdx: number,
   nowIdx: number,
-  anaIdx: number,
   L: ChartLayout,
   fullscreen: boolean,
   withRail = false,
 ): string {
   const axis = buildAxisSvg(L);
   const rightAxis = buildRightAxisSvg(L);
-  const { svg, geo } = buildPlotSvg(points, t, scrubIdx, nowIdx, anaIdx, L);
+  const { svg, geo } = buildPlotSvg(points, t, scrubIdx, nowIdx, L);
   const chips =
     laneChip(L.laneChipY[0], "temp", t.laneTemp) +
     laneChip(L.laneChipY[1], "precip", t.lanePrecip) +
@@ -992,7 +985,7 @@ export function renderMapPanelGraph(
     <div class="graph-bare graph-panel">
       ${readoutHtml(points, Math.max(0, Math.min(points.length - 1, opts.scrubIdx)), opts.t, true, expanded, opts.fit ?? false)}
       <div class="chart-fit">
-        ${chartBlock(points, opts.t, opts.scrubIdx, opts.nowIdx, opts.anaIdx, resolved, expanded, opts.fit ?? false)}
+        ${chartBlock(points, opts.t, opts.scrubIdx, opts.nowIdx, resolved, expanded, opts.fit ?? false)}
       </div>
       ${legendHtml(opts.t, opts.metaLine, hasGustSeries(points))}
     </div>`;
@@ -1064,7 +1057,6 @@ export function renderMapPanelGraph(
     opts.t,
     idx,
     opts.nowIdx,
-    opts.anaIdx,
     L,
   );
 

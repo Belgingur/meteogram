@@ -117,7 +117,6 @@ describe("data-encoding colours", () => {
       labels("en"),
       0,
       0,
-      0,
       panelLayout(),
       true,
     );

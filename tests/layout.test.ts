@@ -300,7 +300,6 @@ describe("CHART_FIT_SELECTORS", () => {
       labels("is"),
       0,
       0,
-      0,
       resolveChartLayoutForTest(),
       true,
     );

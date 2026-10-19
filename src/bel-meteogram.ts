@@ -633,21 +633,6 @@ export class BelMeteogram extends HTMLElement {
     return t.metaLine(fmt(anaDate), fmt(updDate));
   }
 
-  private analysisIndex(points: HourPoint[]): number {
-    if (!this.analysisTime || !points.length) return 0;
-    const target = this.analysisTime.getTime();
-    let best = 0;
-    let bd = Infinity;
-    for (let i = 0; i < points.length; i++) {
-      const d = Math.abs(points[i].utcMs - target);
-      if (d < bd) {
-        bd = d;
-        best = i;
-      }
-    }
-    return best;
-  }
-
   /**
    * Inline left/top/width/height for the draggable panel. Resolves the user's
    * size (or defaults), clamps both size and position to the live host box —
@@ -1196,7 +1181,6 @@ export class BelMeteogram extends HTMLElement {
         const { setScrubIdx } = renderMapPanelGraph(host, gp, {
           scrubIdx: initial,
           nowIdx: nowMarkerIndex(gp),
-          anaIdx: this.analysisIndex(gp),
           onScrub: (i) => {
             this.noteScrub(gp, i);
             this.persistScrubSoon();
