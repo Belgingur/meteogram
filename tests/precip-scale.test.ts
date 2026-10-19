@@ -190,7 +190,7 @@ describe.each([
   it("draws heavy rain in order instead of cutting it off", () => {
     const p = points([1, 4, 8]);
     const L = resolveChartLayout(base, p);
-    const html = chartBlock(p, t, 0, -1, -1, L, false);
+    const html = chartBlock(p, t, 0, -1, L, false);
     const [h1, h4, h8] = barHeights(html, DATA_COLORS.precip);
     expect(h8).toBeCloseTo(L.precipCap, 5);
     expect(h4).toBeLessThan(h8);
