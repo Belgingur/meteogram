@@ -198,6 +198,10 @@ function isEditableTarget(target: EventTarget | undefined): boolean {
  *   hide-language   full mode: leave the language choice out of the settings
  *                   overlay — for hosts that set `language` from their own
  *                   language control, so the two can never disagree
+ *   hide-models     full mode: leave the forecast model choice out of the
+ *                   settings overlay — for hosts that pick the forecast
+ *                   themselves (forecast-type/-name/domain) from a config that
+ *                   lists several, so the chart follows the host's model
  *   mode            "graph" (default) | "full"
  *   view            initial full-mode view: "table" (default) | "graph"
  *   closable        full mode: render a ✕ button over the location block and
@@ -1103,6 +1107,7 @@ export class BelMeteogram extends HTMLElement {
           this.query,
           t,
           !this.hasAttribute("hide-language"),
+          !this.hasAttribute("hide-models"),
         )
       : "";
 

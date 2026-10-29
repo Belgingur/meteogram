@@ -149,6 +149,7 @@ returns 90), so clamping by it dropped real forecast hours.
 | `view` | `table` | Initial full-mode view: `table` or `graph` |
 | `closable` | _(absent)_ | Full mode: render a ✕ over the location block; pressing it emits `bel-meteogram-close` (the host dismisses the widget) |
 | `hide-language` | _(absent)_ | Full mode: leave the language choice out of the settings overlay, for a host that sets `language` from its own language control |
+| `hide-models` | _(absent)_ | Full mode: leave the forecast model choice out of the settings overlay, for a host that picks the forecast with `forecast-type` / `forecast-name` / `domain` from a config listing several |
 | `api-user` / `api-password` | — | Optional basic auth for the data endpoint |
 | `sample` | _(absent)_ | Render generated sample data (development/design review) |
 
