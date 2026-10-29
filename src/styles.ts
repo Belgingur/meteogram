@@ -1275,6 +1275,8 @@ input:focus-visible,
     column-gap: 24px;
   }
   .ov-col--station { border-left: 1px solid var(--line); padding-left: 24px; }
+  .ov-cols--single { grid-template-columns: minmax(0, 1fr); }
+  .ov-cols--single .ov-col--station { border-left: 0; padding-left: 0; }
   .ov-col--station .station-list { margin-top: 6px; padding-bottom: 10px; }
   .overlay .station-search { padding: 10px 14px; font-size: 15px; }
   .overlay .station { padding: 8px 4px; min-height: 44px; }

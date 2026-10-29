@@ -545,6 +545,7 @@ export function overlayHtml(
   query: string,
   t: Labels,
   showLanguage = true,
+  showModels = true,
 ): string {
   const chips = models
     .map(
@@ -552,6 +553,19 @@ export function overlayHtml(
         `<button class="chip${m.id === selectedModelId ? " on" : ""}" type="button" data-model="${i}" aria-pressed="${m.id === selectedModelId}">${esc(m.name)}</button>`,
     )
     .join("");
+  const modelSection = showModels
+    ? `
+            <div class="section-label">${esc(t.forecastModel)}</div>
+            <div class="chips chips-models">${chips}</div>`
+    : "";
+  const languageSection = showLanguage ? languageSectionHtml(lang, t) : "";
+  // With both choices hidden only the station search is left: no empty column.
+  const choices = modelSection || languageSection
+    ? `
+          <div class="ov-col">${modelSection}
+            ${languageSection}
+          </div>`
+    : "";
   return `
     <div class="backdrop">
       <div class="overlay" role="dialog" aria-modal="true" aria-label="${esc(t.settings)}" tabindex="-1">
@@ -561,12 +575,7 @@ export function overlayHtml(
             <svg width="16" height="16" viewBox="0 0 16 16"><line x1="3" y1="3" x2="13" y2="13" stroke="#16324A" stroke-width="2.2" stroke-linecap="round"/><line x1="13" y1="3" x2="3" y2="13" stroke="#16324A" stroke-width="2.2" stroke-linecap="round"/></svg>
           </button>
         </div>
-        <div class="ov-cols">
-          <div class="ov-col">
-            <div class="section-label">${esc(t.forecastModel)}</div>
-            <div class="chips chips-models">${chips}</div>
-            ${showLanguage ? languageSectionHtml(lang, t) : ""}
-          </div>
+        <div class="ov-cols${choices ? "" : " ov-cols--single"}">${choices}
           <div class="ov-col ov-col--station">
             <div class="section-label">${esc(t.location)}</div>
             <input class="station-search" type="text" enterkeyhint="search" value="${esc(query)}" placeholder="${esc(t.search)}" aria-label="${esc(t.search)}" autocomplete="off">
