@@ -11,6 +11,8 @@ import type {
  *   {origin}/api/v2/widget/meteo/config/{client-name}  → forecast list
  *   forecast.url                                       → forecast metadata
  *   station_data_url (templated)                       → meteogram.json
+ * The first two are cached (see CONFIG_TTL_MS); only the point data is
+ * fetched for every point.
  */
 
 export interface ApiOptions {
@@ -28,10 +30,42 @@ export function configUrl(opts: ApiOptions): string {
   return `${scriptOrigin}/api/v2/widget/meteo/config/${opts.clientName}`;
 }
 
+/**
+ * How long the forecast list and a forecast's metadata are reused. Neither
+ * depends on the point, and the run times come with the point data, so a
+ * widget asks for them once instead of before every point it loads. The
+ * config response itself expires an hour after it is served.
+ */
+export const CONFIG_TTL_MS = 60 * 60 * 1000;
+
+const configCache = new Map<string, { at: number; json: Promise<unknown> }>();
+
+/**
+ * GET `url` as JSON, sharing one request between every caller (all widgets on
+ * the page) for {@link CONFIG_TTL_MS}. A failed request is forgotten, so a
+ * retry asks again.
+ */
+function cachedJson<T>(url: string, what: string): Promise<T> {
+  const hit = configCache.get(url);
+  if (hit && Date.now() - hit.at < CONFIG_TTL_MS) return hit.json as Promise<T>;
+  const json = fetch(url).then(async (response) => {
+    if (!response.ok) throw new Error(`${what}: HTTP ${response.status}`);
+    return (await response.json()) as T;
+  });
+  configCache.set(url, { at: Date.now(), json });
+  json.catch(() => {
+    if (configCache.get(url)?.json === json) configCache.delete(url);
+  });
+  return json;
+}
+
+/** Forget every cached config and forecast metadata response. */
+export function clearConfigCache(): void {
+  configCache.clear();
+}
+
 export async function loadConfig(opts: ApiOptions): Promise<ForecastUrl[]> {
-  const response = await fetch(configUrl(opts));
-  if (!response.ok) throw new Error(`config: HTTP ${response.status}`);
-  const data: MeteoConfigResponse = await response.json();
+  const data = await cachedJson<MeteoConfigResponse>(configUrl(opts), "config");
   return data.forecasts;
 }
 
@@ -53,12 +87,8 @@ export function findForecast(
   return forecasts.find((f) => f.id === path);
 }
 
-export async function loadForecastMetadata(
-  url: string,
-): Promise<ForecastMetadata> {
-  const response = await fetch(url);
-  if (!response.ok) throw new Error(`forecast: HTTP ${response.status}`);
-  return response.json();
+export function loadForecastMetadata(url: string): Promise<ForecastMetadata> {
+  return cachedJson<ForecastMetadata>(url, "forecast");
 }
 
 /**
