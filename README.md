@@ -123,7 +123,10 @@ provide station elevations. Geolocation is also left to the host page
 
 The widget talks to the same WOD API as the previous widget:
 `{origin}/api/v2/widget/meteo/config/{client-name}` → forecast metadata →
-`…/meteogram.json[?duration={hours}h]`. As before, the script and the
+`…/meteogram.json[?duration={hours}h]`. The config and the forecast metadata
+do not depend on the point, so they are fetched once and reused for an hour
+by every widget on the page; each new point fetches only its
+`meteogram.json`. As before, the script and the
 forecast API must share an origin unless `api-url` is set. In full mode the
 model chips come from the config's forecast list and the station list from
 the forecast metadata, and the point request carries **no** `duration` at
