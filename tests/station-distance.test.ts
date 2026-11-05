@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 
+import { distanceKm } from "../src/geo";
 import { labels } from "../src/i18n";
-import { distanceKm, distanceLabel, stationRowsHtml, type Place } from "../src/landing";
+import { distanceLabel, stationRowsHtml, type Place } from "../src/landing";
 
 describe("distanceKm", () => {
   it("measures a known distance (Reykjavík to Akureyri, ~250 km)", () => {

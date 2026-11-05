@@ -511,3 +511,120 @@ test("the bottom sheet takes focus, closes on Escape and gives focus back", asyn
   await expect(sheet).toHaveCount(0);
   await expect(page.locator("#opener")).toBeFocused();
 });
+
+test.describe("station-corrected forecast @mobile", () => {
+  const API = "https://wod.example/api/v2";
+  const CONFIG = `${API}/widget/meteo/config/site`;
+  const STATION = { name: "Akureyri", lat: 65.6856, lon: -18.1002 };
+
+  /** Answer the WOD API from fixtures: one schedule forecast with a station
+   *  listed by ref, and the same series from either point endpoint — the
+   *  station one adding the corrections it applied. */
+  async function mockApi(page: Page, requested: string[]): Promise<void> {
+    const t0 = Date.parse("2026-07-08T00:00:00Z");
+    const time = Array.from({ length: 48 }, (_, i) =>
+      new Date(t0 + i * 3_600_000).toISOString(),
+    );
+    const series = (v: number) => time.map(() => v);
+    const body = (corrections?: Record<string, string>) => ({
+      time,
+      data: {
+        air_temperature_at_2m_agl: series(9),
+        wind_speed_at_10m_agl: series(4),
+        wind_from_direction_at_10m_agl: series(200),
+        lwe_precipitation_rate: series(0),
+        cloud_area_fraction: series(0.5),
+      },
+      meta: { location_timezone_offset: 0, ...(corrections && { corrections }) },
+    });
+    await page.route(`${API}/**`, (route) => {
+      const url = route.request().url();
+      requested.push(url);
+      const json = url.startsWith(`${CONFIG}/forecast/`)
+        ? {
+            forecast_id: "schedule/island-8/2",
+            duration_h: 48,
+            url: "",
+            station_data_url: `${API}/data/point/schedule/island-8/2/[station]/meteogram.xml`,
+            stations: [
+              { id: "vi.3471", ...STATION, extra: { ref: "vi.3471" } },
+              { id: "latlon/64.135,-21.877", name: "Reykjavík", lat: 64.135, lon: -21.877, extra: {} },
+            ],
+          }
+        : url === CONFIG
+          ? {
+              expires: "",
+              forecasts: [
+                { id: "schedule/island-8/2", name: "Island", url: `${CONFIG}/forecast/schedule/island-8/2` },
+              ],
+            }
+          : url.includes("/station/")
+            ? body({
+                air_temperature_at_2m_agl: "linear_regression",
+                wind_speed_at_10m_agl: "linear_regression",
+              })
+            : body();
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(json),
+        headers: { "Access-Control-Allow-Origin": "*" },
+      });
+    });
+  }
+
+  async function mount(page: Page, lat: number, lon: number): Promise<Locator> {
+    await page.evaluate(
+      ({ lat, lon, config }) => {
+        const el = document.createElement("bel-meteogram");
+        el.id = "api-full";
+        el.setAttribute("mode", "full");
+        el.setAttribute("language", "en");
+        el.setAttribute("client-name", "site");
+        el.setAttribute("api-url", config);
+        el.setAttribute("prefer-coordinates", "");
+        el.setAttribute("location-lat", String(lat));
+        el.setAttribute("location-lon", String(lon));
+        document.querySelector("main")!.prepend(el);
+      },
+      { lat, lon, config: CONFIG },
+    );
+    return page.locator("#api-full");
+  }
+
+  test("a point by a station listed by ref shows the corrected forecast", async ({
+    page,
+  }) => {
+    const requested: string[] = [];
+    await mockApi(page, requested);
+    await openFixture(page);
+    // A village label's position, a couple of hundred metres off the station
+    const widget = await mount(page, 65.6835, -18.0878);
+
+    const badge = widget.locator(".corrected");
+    await expect(badge).toBeVisible();
+    await expect(badge).toHaveText("");
+    await expect(badge).toHaveAttribute(
+      "title",
+      "Corrected against observations at Akureyri: temp, wind",
+    );
+    expect(requested.filter((u) => u.includes("/data/point/"))).toEqual([
+      `${API}/data/point/schedule/island-8/2/station/vi.3471/meteogram.json`,
+    ]);
+  });
+
+  test("a point away from any ref station has no badge", async ({ page }) => {
+    const requested: string[] = [];
+    await mockApi(page, requested);
+    await openFixture(page);
+    const widget = await mount(page, 64.135, -21.877);
+
+    // Loaded, so the badge is absent and not merely not drawn yet
+    await expect(widget.locator(".sk")).toHaveCount(0);
+    await expect(widget.locator(".loc-sub, .panel-loc-sub").first()).toBeVisible();
+    await expect(widget.locator(".corrected")).toHaveCount(0);
+    expect(requested.filter((u) => u.includes("/data/point/"))).toEqual([
+      `${API}/data/point/schedule/island-8/2/latlon/64.135,-21.877/meteogram.json`,
+    ]);
+  });
+});
