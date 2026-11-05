@@ -9,7 +9,9 @@ export interface StationMetadata {
   lat: number;
   lon: number;
   name: string | { [locale: string]: string };
-  ref?: string;
+  /** `ref` is set when the config lists the station by its WOD station ref,
+   *  which is what the station endpoint (and its corrected data) needs. */
+  extra?: { ref?: string };
 }
 
 export interface ForecastMetadata {
@@ -39,6 +41,10 @@ export interface MeteogramData {
     /** When the forecast data was last updated (ISO 8601). Preferred over the
      *  HTTP Last-Modified header for the "last update" line. */
     last_modified?: string;
+    /** Variables corrected against the station's observations, mapped to the
+     *  method (`"linear_regression"`). Sent only by the station endpoint; `{}`
+     *  when nothing was corrected. */
+    corrections?: { [variableName: string]: string };
   };
 }
 

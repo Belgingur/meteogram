@@ -135,6 +135,25 @@ is deliberately not used as a cap: it is a config-declared number that can
 undercount what the model actually serves (ECMWF-0p25 declares 72 h and
 returns 90), so clamping by it dropped real forecast hours.
 
+#### Station-corrected forecasts
+
+A station the config lists by its WOD station `ref` (WOD passes it on as
+`extra.ref`) can have its forecast corrected against the station's own
+observations. When the point is within 1 km of such a station, whether picked
+from the list or a host's map click near it, the widget asks
+`…/station/{ref}/meteogram.json` instead of `…/latlon/{lat},{lon}/…`. The
+response's `meta.corrections` names the variables that were corrected (by
+linear regression). When there are any, the location line shows a badge (the
+Lucide `award` icon, no text); its tooltip and accessible name say which
+station and which readings were corrected. WOD has no station endpoint for
+upstream models, so those always use the point. If the station request fails,
+the widget falls back to the point.
+
+WOD serves such a station at the coordinates it has for the station ref, not
+the `lat`/`lon` written next to the ref in the config. A host that sends its own
+copy of the station's coordinates (a map label, say) should keep them within
+1 km of the station, or the point is forecast uncorrected.
+
 ### Attributes
 
 | Attribute | Default | Description |
@@ -170,7 +189,9 @@ meteogram modal).
 the dismissal.
 
 `bel-meteogram-location` — a `CustomEvent` fired on every successful load with
-`detail: { lat, lon, name, tempC }` describing the currently selected point. It
+`detail: { lat, lon, name, tempC, corrections }` describing the currently
+selected point (`corrections` lists the API variables corrected against station
+observations, `[]` when none). It
 fires on the initial load and again whenever the point changes (a station is
 picked in the settings overlay, the forecast model changes, or the host calls
 `loadChartLocation()`), so a map host can drop/move its selected-point pin and
@@ -297,6 +318,12 @@ endorsement. Do not present the widget as affiliated with, or endorsed by,
 Yr, NRK or MET Norway, and do not use their names or logos as branding.
 Crediting the artwork is not a partnership.
 
+The station-corrected badge inlines the [Lucide][lucide] `award` icon,
+© 2026 Lucide Icons and Contributors, under the
+[ISC License][lucide-license]; its notice is in the same banner.
+
+[lucide]: https://lucide.dev/icons/award
+[lucide-license]: https://github.com/lucide-icons/lucide/blob/main/LICENSE
 [yr]: https://github.com/nrkno/yr-weather-symbols
 [yr-license]: https://github.com/nrkno/yr-weather-symbols/blob/master/LICENSE
 [metno]: https://github.com/metno/weathericons

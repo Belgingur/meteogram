@@ -500,6 +500,20 @@ input:focus-visible,
 .panel-loc { padding: 0 18px 4px; flex: none; }
 .panel-loc-name { font-size: 24px; font-weight: 900; color: var(--ink); letter-spacing: -0.3px; }
 .panel-loc-sub { font-size: 12px; font-weight: 700; color: var(--haze); }
+/* Corrected-forecast badge, after the coordinates on the location line */
+.corrected {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  margin-left: 6px;
+  border-radius: 999px;
+  background: var(--aurora-haze);
+  color: var(--aurora-ink);
+  vertical-align: -5px;
+  cursor: help;
+}
 
 .pill-wrap { padding: 10px 16px 0; }
 .pill {

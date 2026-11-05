@@ -27,33 +27,6 @@ export interface Place {
   distanceKm?: number;
 }
 
-/**
- * Great-circle distance in km (equirectangular approximation).
- *
- * Accurate to a fraction of a percent over the few hundred km that matter for
- * "which station is nearest", and far cheaper than haversine. Replaces a fixed
- * 0.2 weight on the longitude term — a cos²(lat) approximation hard-coded for
- * Iceland (cos²64° ≈ 0.19). Nearer the equator the true factor approaches 1, so
- * longitude counted for a fraction of what it should and the "nearest" ordering
- * came out scrambled for every domain outside the North Atlantic.
- */
-export function distanceKm(
-  aLat: number,
-  aLon: number,
-  bLat: number,
-  bLon: number,
-): number {
-  const toRad = Math.PI / 180;
-  const meanLat = ((aLat + bLat) / 2) * toRad;
-  const dLat = (bLat - aLat) * toRad;
-  let dLon = (bLon - aLon) * toRad;
-  // Take the short way round the antimeridian.
-  if (dLon > Math.PI) dLon -= 2 * Math.PI;
-  if (dLon < -Math.PI) dLon += 2 * Math.PI;
-  const x = dLon * Math.cos(meanLat);
-  return Math.hypot(x, dLat) * 6371;
-}
-
 /** "12 km" / "340 km" — coarse enough not to imply false precision. */
 export function distanceLabel(km: number): string {
   if (!Number.isFinite(km)) return "";
@@ -367,6 +340,41 @@ export function draggablePanelHeaderHtml(
       <button class="pill panel-pill" type="button"><span>${esc(summary)}</span>${chevronSmall}</button>
       ${close}
     </div>`;
+}
+
+/** Lucide "award" (ISC, lucide.dev), drawn in the badge's own text colour. */
+const awardSvg =
+  `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><path d="m15.477 12.89 1.515 8.526a.5.5 0 0 1-.81.47l-3.58-2.687a1 1 0 0 0-1.197 0l-3.586 2.686a.5.5 0 0 1-.81-.469l1.514-8.526"/><circle cx="12" cy="8" r="6"/></svg>`;
+
+/** The lane a corrected API variable is read in, by the variable's prefix. */
+function correctedField(variable: string, t: Labels): string | null {
+  if (variable.startsWith("air_temperature")) return t.laneTemp;
+  if (variable.startsWith("wind_")) return t.laneWind;
+  if (variable.startsWith("lwe_precipitation")) return t.lanePrecip;
+  return null;
+}
+
+/**
+ * Marks a forecast corrected against a station's observations: an icon alone,
+ * whose tooltip says for which station and which readings, because
+ * the API corrects each variable separately and often not all of them.
+ * Empty when nothing was corrected.
+ */
+export function correctedBadgeHtml(
+  corrections: string[],
+  station: string,
+  t: Labels,
+): string {
+  if (!corrections.length) return "";
+  const fields = [
+    ...new Set(
+      corrections
+        .map((v) => correctedField(v, t))
+        .filter((f): f is string => !!f),
+    ),
+  ].join(", ");
+  const detail = t.correctedDetail(station, fields);
+  return `<span class="corrected" title="${esc(detail)}" aria-label="${esc(detail)}" role="img">${awardSvg}</span>`;
 }
 
 /** Analysis / last-update line below table or graph. */

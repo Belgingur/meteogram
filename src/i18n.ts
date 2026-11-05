@@ -61,6 +61,9 @@ export interface Labels {
   expand: string;
   /** Resize-grip affordance label (aria-label + native tooltip). */
   resize: string;
+  /** Tooltip of the station-corrected badge: the station, and the lanes
+   *  corrected ("" when unknown) */
+  correctedDetail: (station: string, fields: string) => string;
   monthsShort: string[];
   metaLine: (analysis: string, lastUpdate: string) => string;
 }
@@ -115,6 +118,8 @@ const is: Labels = {
   minimize: "Minnka",
   expand: "Stækka",
   resize: "Breyta stærð",
+  correctedDetail: (station, fields) =>
+    `Leiðrétt m.v. mælingar á stöðinni ${station}${fields ? `: ${fields.toLowerCase()}` : ""}`,
   monthsShort: [
     "jan", "feb", "mar", "apr", "maí", "jún",
     "júl", "ágú", "sep", "okt", "nóv", "des",
@@ -173,6 +178,8 @@ const en: Labels = {
   minimize: "Minimize",
   expand: "Expand",
   resize: "Resize",
+  correctedDetail: (station, fields) =>
+    `Corrected against observations at ${station}${fields ? `: ${fields.toLowerCase()}` : ""}`,
   monthsShort: [
     "Jan", "Feb", "Mar", "Apr", "May", "Jun",
     "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
@@ -236,6 +243,8 @@ const es: Labels = {
   minimize: "Minimizar",
   expand: "Ampliar",
   resize: "Cambiar tamaño",
+  correctedDetail: (station, fields) =>
+    `Corregida con observaciones en ${station}${fields ? `: ${fields.toLowerCase()}` : ""}`,
   monthsShort: [
     "ene", "feb", "mar", "abr", "may", "jun",
     "jul", "ago", "sep", "oct", "nov", "dic",
@@ -294,6 +303,8 @@ const pt: Labels = {
   minimize: "Minimizar",
   expand: "Expandir",
   resize: "Redimensionar",
+  correctedDetail: (station, fields) =>
+    `Corrigida com observações em ${station}${fields ? `: ${fields.toLowerCase()}` : ""}`,
   monthsShort: [
     "jan", "fev", "mar", "abr", "mai", "jun",
     "jul", "ago", "set", "out", "nov", "dez",
@@ -352,6 +363,8 @@ const pl: Labels = {
   minimize: "Zminimalizuj",
   expand: "Powiększ",
   resize: "Zmień rozmiar",
+  correctedDetail: (station, fields) =>
+    `Skorygowana według pomiarów na stacji ${station}${fields ? `: ${fields.toLowerCase()}` : ""}`,
   monthsShort: [
     "sty", "lut", "mar", "kwi", "maj", "cze",
     "lip", "sie", "wrz", "paź", "lis", "gru",
@@ -410,6 +423,8 @@ const fo: Labels = {
   minimize: "Minka",
   expand: "Stækka",
   resize: "Broyt stødd",
+  correctedDetail: (station, fields) =>
+    `Rættað eftir mátingum á støðini ${station}${fields ? `: ${fields.toLowerCase()}` : ""}`,
   monthsShort: [
     "jan", "feb", "mar", "apr", "mai", "jun",
     "jul", "aug", "sep", "okt", "nov", "des",

@@ -1,13 +1,16 @@
 import {
   findForecast,
   forecastPath,
+  hasStationEndpoint,
   loadConfig,
   loadForecastMetadata,
   loadMeteogramData,
+  refStationAt,
   runTimes,
   stationDataUrl,
   type ApiOptions,
 } from "./api";
+import { distanceKm } from "./geo";
 import {
   forecastSpanLabel,
   indexAtInstant,
@@ -18,8 +21,8 @@ import {
 import { labels, type Labels } from "./i18n";
 import {
   coordLabel,
+  correctedBadgeHtml,
   dayChipsHtml,
-  distanceKm,
   draggablePanelHeaderHtml,
   formatUtcMetaTime,
   groupDays,
@@ -217,7 +220,7 @@ function isEditableTarget(target: EventTarget | undefined): boolean {
  *   "bel-meteogram-close"   the closable ✕ was pressed; the host owns the
  *                           dismissal (the widget does not remove itself).
  *   "bel-meteogram-location" CustomEvent fired on every successful load with
- *                           detail { lat, lon, name, tempC } — the currently
+ *                           detail { lat, lon, name, tempC, corrections } — the currently
  *                           selected point. Lets a host page place/move its map
  *                           pin when a different station is picked in the
  *                           overlay or set via loadChartLocation(). Bubbles and
@@ -254,6 +257,10 @@ export class BelMeteogram extends HTMLElement {
   // Full-mode state
   private rawForecasts: ForecastUrl[] = [];
   private rawStations: StationMetadata[] = [];
+  /** Variables the shown forecast has corrected against station observations */
+  private corrections: string[] = [];
+  /** The station they were corrected for */
+  private correctedStation: StationMetadata | null = null;
   private forecastId = "";
   private pickedPlaceName = "";
   private view: "table" | "graph" = "table";
@@ -671,6 +678,8 @@ export class BelMeteogram extends HTMLElement {
           lon,
           name,
           tempC: nowTemp === null ? null : Math.round(nowTemp),
+          // API variables corrected against station observations ([] = none)
+          corrections: this.corrections,
         },
         bubbles: true,
         composed: true,
@@ -688,6 +697,8 @@ export class BelMeteogram extends HTMLElement {
     this.scrubIdx = -1;
 
     if (this.hasAttribute("sample")) {
+      this.corrections = [];
+      this.correctedStation = null;
       this.points = sampleHourPoints(
         this.isFull ? SAMPLE_FULL_HOURS : this.hours,
       );
@@ -758,13 +769,27 @@ export class BelMeteogram extends HTMLElement {
       // mode keeps its `hours` window so a card embed still downloads two days,
       // not two weeks.
       const windowH = this.isFull ? Infinity : this.hours;
-      const data = await loadMeteogramData(
-        stationDataUrl(meta, lat, lon, this.isFull ? undefined : this.hours),
-        opts,
-      );
+      const hours = this.isFull ? undefined : this.hours;
+      // A point on (or next to) a station the config lists by ref takes the
+      // station's data, which the API corrects against its observations where
+      // it can. Should that endpoint fail, the plain point forecast still shows.
+      const station = hasStationEndpoint(meta)
+        ? refStationAt(meta.stations ?? [], lat, lon)
+        : null;
+      const data = station
+        ? await loadMeteogramData(
+            stationDataUrl(meta, lat, lon, hours, station.extra?.ref),
+            opts,
+          ).catch((err: unknown) => {
+            console.warn("bel-meteogram: station data failed, using the point", err);
+            return loadMeteogramData(stationDataUrl(meta, lat, lon, hours), opts);
+          })
+        : await loadMeteogramData(stationDataUrl(meta, lat, lon, hours), opts);
       if (token !== this.loadToken) return; // superseded by a newer load
       this.rawForecasts = forecasts;
       this.rawStations = meta.stations ?? [];
+      this.corrections = Object.keys(data.data.meta?.corrections ?? {});
+      this.correctedStation = this.corrections.length ? station : null;
       this.points = toHourPoints(data.data, windowH);
       const offset = data.data.meta?.location_timezone_offset;
       this.tzOffsetMin = typeof offset === "number" ? offset : null;
@@ -1073,7 +1098,15 @@ export class BelMeteogram extends HTMLElement {
       lang: lang.toUpperCase(),
       tzOffsetMin: this.tzOffsetMin,
     });
-    const sub = isNaN(lat) || isNaN(lon) ? "" : esc(coordLabel(lat, lon, t));
+    const sub =
+      (isNaN(lat) || isNaN(lon) ? "" : esc(coordLabel(lat, lon, t))) +
+      (this.status === "ready" && this.correctedStation
+        ? correctedBadgeHtml(
+            this.corrections,
+            localName(this.correctedStation.name, lang),
+            t,
+          )
+        : "");
 
     let body = "";
     if (this.status === "loading") {

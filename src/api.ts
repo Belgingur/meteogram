@@ -1,8 +1,10 @@
+import { distanceKm } from "./geo";
 import type {
   ForecastMetadata,
   ForecastUrl,
   MeteoConfigResponse,
   MeteogramData,
+  StationMetadata,
 } from "./types";
 
 /**
@@ -100,18 +102,68 @@ export function loadForecastMetadata(url: string): Promise<ForecastMetadata> {
  * config-declared number that can undercount what the model actually serves
  * (ECMWF-0p25 declares 72 h and returns 90 h), so clamping by it silently threw
  * away real forecast hours.
+ *
+ * With a `stationRef` (and a forecast that {@link hasStationEndpoint}) it asks
+ * for that station instead of the point, which is the only request the API
+ * corrects against the station's observations.
  */
 export function stationDataUrl(
   forecast: ForecastMetadata,
   lat: number,
   lon: number,
   hours?: number,
+  stationRef?: string,
 ): string {
   const query =
     hours !== undefined && Number.isFinite(hours) ? `?duration=${hours}h` : "";
+  const point =
+    stationRef && hasStationEndpoint(forecast)
+      ? `station/${encodeURIComponent(stationRef)}`
+      : `latlon/${lat},${lon}`;
   return forecast.station_data_url
-    .replace("[station]", `latlon/${lat},${lon}`)
+    .replace("[station]", point)
     .replace("meteogram.xml", `meteogram.json${query}`);
+}
+
+/**
+ * Whether the forecast serves point data by station ref. WOD has the station
+ * endpoint for schedules and jobs, not for upstream models.
+ */
+export function hasStationEndpoint(forecast: ForecastMetadata): boolean {
+  return !forecast.forecast_id?.startsWith("upstream/");
+}
+
+/**
+ * How far a point may be from a station and still be taken as that station.
+ *
+ * Not an exact match: a host's own copy of a station list (Mímir's map labels)
+ * need not carry the coordinates WOD has for the station, and a click on a
+ * village label lands a few hundred metres from either. A kilometre is close
+ * enough to mean "this station" and far enough not to claim the next valley.
+ */
+export const STATION_MATCH_KM = 1;
+
+/**
+ * The station with a WOD ref nearest to the point, when it is within
+ * {@link STATION_MATCH_KM}. Its data can come from the station endpoint, which
+ * corrects what it can against the station's observations.
+ */
+export function refStationAt(
+  stations: StationMetadata[],
+  lat: number,
+  lon: number,
+): StationMetadata | null {
+  let best: StationMetadata | null = null;
+  let bestKm = STATION_MATCH_KM;
+  for (const s of stations) {
+    if (!s.extra?.ref) continue;
+    const km = distanceKm(lat, lon, s.lat, s.lon);
+    if (km <= bestKm) {
+      best = s;
+      bestKm = km;
+    }
+  }
+  return best;
 }
 
 export interface MeteogramFetchResult {
