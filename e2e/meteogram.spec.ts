@@ -995,6 +995,110 @@ test.describe("without selected-time", () => {
   });
 });
 
+// The graph card (no `mode`) has no day chips or panel around it, but takes
+// `selected-time` and reports `bel-meteogram-time` the same way.
+test.describe("selected-time in graph mode", () => {
+  test("reports the host's time and the reader's click, key and drag, never a hover", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 800, height: 600 });
+    await openFixture(page);
+
+    const graph = page.locator("#graph-card");
+    const slider = graph.locator(".scroll[role='slider']");
+    const readout = graph.locator(".readout");
+    const roTime = readout.locator(".ro-time");
+    const cursor = graph.locator(".scrub-cursor");
+    await expect(slider).toHaveAttribute("aria-valuenow", "3");
+    await recordEvents(page, "graph-card");
+    const expected: TimeDetail[] = [];
+    /** The readout shows `hh`, and the events so far are `expected` plus this one. */
+    const expectEvent = async (
+      hh: string,
+      time: string | null,
+      source: TimeDetail["source"],
+    ): Promise<void> => {
+      if (time) await expect(roTime).toContainText(hh);
+      else await expect(roTime).toHaveText("No forecast for this time");
+      const tempC = time ? await readoutTemp(readout) : null;
+      expected.push({ time, tempC, source });
+      await expect.poll(() => timeEvents(page)).toEqual(expected);
+    };
+
+    // The host sets the time.
+    await setSelectedTime(page, "graph-card", "2026-07-08T15:00:00.000Z");
+    await expect(slider).toHaveAttribute("aria-valuenow", "6");
+    await expectEvent("15:00", "2026-07-08T15:00:00.000Z", "host");
+
+    // Hovering two columns (34 px each) right previews 17:00 and reports
+    // nothing; leaving puts the cursor back on the host's hour.
+    const plot = await reveal(page, graph.locator("svg.mg-plot"));
+    const x15 = plot.x + (await lineX(cursor));
+    await page.mouse.move(x15 + 68, plot.y + 100);
+    await expect(roTime).toContainText("17:00");
+    await page.mouse.move(2, 2);
+    await expect(roTime).toContainText("15:00");
+    expect(await timeEvents(page)).toEqual(expected);
+
+    // A click one column right picks 16:00.
+    await page.mouse.click(x15 + 34, plot.y + 100);
+    await expectEvent("16:00", "2026-07-08T16:00:00.000Z", "user");
+    await page.mouse.move(2, 2);
+
+    // An arrow key on the focused chart picks 17:00.
+    await slider.focus();
+    await page.keyboard.press("ArrowRight");
+    await expect(slider).toHaveAttribute("aria-valuenow", "8");
+    await expectEvent("17:00", "2026-07-08T17:00:00.000Z", "user");
+
+    // A drag along the track, from the cursor two columns right: nothing while
+    // it moves, then 19:00 when it lets go. (It starts on the selected hour, so
+    // the press itself reports nothing new.)
+    const hit = (await graph.locator(".scrub-hit").boundingBox())!;
+    const y = hit.y + hit.height / 2;
+    const x17 = plot.x + (await lineX(cursor));
+    await page.mouse.move(x17, y);
+    await page.mouse.down();
+    await page.mouse.move(x17 + 68, y, { steps: 4 });
+    await expect(roTime).toContainText("19:00");
+    expect(await timeEvents(page)).toEqual(expected);
+    await page.mouse.up();
+    await expectEvent("19:00", "2026-07-08T19:00:00.000Z", "user");
+    await page.mouse.move(2, 2);
+
+    // The host's time goes outside the forecast (before the run)…
+    await setSelectedTime(page, "graph-card", "2026-07-08T00:00:00.000Z");
+    await expectEvent("", null, "host");
+
+    // …and is removed: back to the current hour.
+    await setSelectedTime(page, "graph-card", null);
+    await expect(slider).toHaveAttribute("aria-valuenow", "3");
+    await expectEvent("12:00", "2026-07-08T12:00:00.000Z", "host");
+  });
+});
+
+test.describe("selected-time in graph mode @mobile", () => {
+  test("a tap picks the reader's hour", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openFixture(page);
+
+    const graph = page.locator("#graph-card");
+    const readout = graph.locator(".readout");
+    const cursor = graph.locator(".scrub-cursor");
+    await setSelectedTime(page, "graph-card", "2026-07-08T15:00:00.000Z");
+    await expect(graph.locator(".scroll[role='slider']")).toHaveAttribute("aria-valuenow", "6");
+    await recordEvents(page, "graph-card");
+
+    // One column (34 px) right of the cursor. A tap on touch, a click otherwise.
+    await press(page, graph.locator("svg.mg-plot"), (await lineX(cursor)) + 34, 100);
+    await expect(readout.locator(".ro-time")).toContainText("16:00");
+    const tempC = await readoutTemp(readout);
+    await expect
+      .poll(() => timeEvents(page))
+      .toEqual([{ time: "2026-07-08T16:00:00.000Z", tempC, source: "user" }]);
+  });
+});
+
 test.describe("selected-time on the phone @mobile", () => {
   test("moves the pinned readout and cursor, and the day the table shows", async ({
     page,
