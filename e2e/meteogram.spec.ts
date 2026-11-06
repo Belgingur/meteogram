@@ -24,11 +24,67 @@ async function blockWebfonts(page: Page): Promise<void> {
   );
 }
 
-async function openFixture(page: Page): Promise<void> {
+async function openFixture(
+  page: Page,
+  /** Serve the fixture with `selected-time` already on this widget, so the
+   *  chart is first drawn with it rather than moved to it afterwards. */
+  selectedTime?: { id: string; iso: string },
+): Promise<void> {
   await page.clock.install({ time: FIXED_TIME });
   await page.addInitScript(() => localStorage.clear());
   await blockWebfonts(page);
+  if (selectedTime) {
+    // Set just before the element is defined, i.e. before it first connects.
+    await page.addInitScript(({ id, iso }) => {
+      const define = customElements.define.bind(customElements);
+      customElements.define = (name, ctor, options) => {
+        if (name === "bel-meteogram") {
+          document.getElementById(id)?.setAttribute("selected-time", iso);
+        }
+        define(name, ctor, options);
+      };
+    }, selectedTime);
+  }
   await page.goto("/e2e/fixture.html");
+}
+
+/**
+ * Every drawn part of the scrub cursor in a widget's chart, and whether it
+ * computes as visible: the SVG line and its temperature and wind dots (every
+ * chart), the phone chart's handle, and the landscape rail's HTML cursor line
+ * and grab dot. Read from computed style, so a part hidden by an attribute, a
+ * class or a stylesheet all count, and a part left showing cannot slip by.
+ */
+async function cursorParts(
+  widget: Locator,
+): Promise<{ part: string; shown: boolean }[]> {
+  return widget.evaluate((el) =>
+    [
+      ...el.shadowRoot!.querySelectorAll(
+        ".graph-host :is(.scrub-cursor, .scrub-dot-temp, .scrub-dot-wind, .scrub-handle, .scrub-grab)",
+      ),
+    ].map((part) => {
+      const cs = getComputedStyle(part);
+      return {
+        part: `${part.tagName.toLowerCase()}.${part.getAttribute("class")}`,
+        shown: cs.visibility !== "hidden" && cs.display !== "none",
+      };
+    }),
+  );
+}
+
+/** No part of the cursor is on screen, and there are parts to check. The orange
+ *  "now" marker is not the cursor: it marks the current hour whatever is
+ *  selected, so it stays. */
+async function expectNoCursor(widget: Locator, minParts = 3): Promise<void> {
+  await expect.poll(async () => (await cursorParts(widget)).length).toBeGreaterThanOrEqual(minParts);
+  await expect
+    .poll(async () => (await cursorParts(widget)).filter((p) => p.shown))
+    .toEqual([]);
+  // Computed style, not toBeVisible: a vertical line has a zero-width box.
+  const now = widget.locator(".graph-host .chart-now");
+  await expect(now).toHaveCount(1);
+  expect(await now.evaluate((el) => getComputedStyle(el).visibility)).toBe("visible");
 }
 
 /** x of an SVG line inside the component, in its own user units */
@@ -787,10 +843,7 @@ test.describe("selected-time", () => {
     await expect(readout).toHaveClass(/is-outside/);
     await expect(readout.locator(".ro-time")).toHaveText("No forecast for this time");
     await expect(readout.locator(".ro-vals")).toBeHidden();
-    await expect(panel.locator(".chart-plot .scrub-cursor")).toHaveAttribute(
-      "visibility",
-      "hidden",
-    );
+    await expectNoCursor(panel);
     await expect
       .poll(() => timeEvents(page))
       .toEqual([{ time: null, tempC: null, source: "host" }]);
@@ -799,10 +852,40 @@ test.describe("selected-time", () => {
     await setSelectedTime(page, "desktop-panel", "2026-07-08T18:00:00.000Z");
     await expect(readout).not.toHaveClass(/is-outside/);
     await expect(readout.locator(".ro-time")).toHaveText(/18:00/);
-    await expect(panel.locator(".chart-plot .scrub-cursor")).not.toHaveAttribute(
-      "visibility",
-      "hidden",
-    );
+    await expect
+      .poll(async () => (await cursorParts(panel)).every((p) => p.shown))
+      .toBe(true);
+  });
+
+  test("no cursor when the chart is first drawn outside, or repainted while outside", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    // Before the run (09:00 on the 8th), already set when the chart is built.
+    await openFixture(page, { id: "desktop-panel", iso: "2026-07-08T00:00:00.000Z" });
+
+    const panel = page.locator("#desktop-panel");
+    const readout = panel.locator(".graph-host .readout");
+    await expect(readout).toHaveClass(/is-outside/);
+    await expectNoCursor(panel);
+
+    // Inside, on another day (the panel repaints for the day chips)…
+    await setSelectedTime(page, "desktop-panel", "2026-07-09T15:00:00.000Z");
+    await expect(panel.locator(".day-chip.sel")).toHaveAttribute("data-day", "1");
+    await expect
+      .poll(async () => (await cursorParts(panel)).every((p) => p.shown))
+      .toBe(true);
+
+    // …then past the run's end…
+    await setSelectedTime(page, "desktop-panel", "2026-07-20T00:00:00.000Z");
+    await expect(readout).toHaveClass(/is-outside/);
+    await expectNoCursor(panel);
+
+    // …and a repaint while outside (picking a day) draws no cursor either.
+    await panel.locator(".day-chip[data-day='2']").click();
+    await expect(panel.locator(".day-chip.sel")).toHaveAttribute("data-day", "2");
+    await expect(panel.locator(".graph-host .readout")).toHaveClass(/is-outside/);
+    await expectNoCursor(panel);
   });
 
   test("removing the attribute returns to now", async ({ page }) => {
@@ -938,15 +1021,51 @@ test.describe("selected-time on the phone @mobile", () => {
     await setSelectedTime(page, "mobile-full", "2026-06-01T00:00:00.000Z");
     await expect(readout).toHaveClass(/is-outside/);
     await expect(readout.locator(".ro-time")).toHaveText("No forecast for this time");
-    await expect(mobile.locator(".graph-host .scrub-cursor")).toHaveAttribute(
-      "visibility",
-      "hidden",
-    );
+    // Line, both dots and the handle.
+    await expectNoCursor(mobile, 4);
 
     await setSelectedTime(page, "mobile-full", "2026-07-10T09:00:00.000Z");
     await mobile.locator(".tab[data-view='table']").click();
     await expect(mobile.locator(".day-chip.sel")).toHaveAttribute("data-day", "2");
     expect(await statusEvents(page)).toEqual([]);
+  });
+});
+
+test.describe("selected-time outside the run, first drawn @mobile", () => {
+  test("the phone chart draws no cursor", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openFixture(page, { id: "mobile-full", iso: "2026-07-20T00:00:00.000Z" });
+
+    const mobile = page.locator("#mobile-full");
+    await mobile.locator(".tab[data-view='graph']").click();
+    await expect(mobile.locator(".graph-host .readout")).toHaveClass(/is-outside/);
+    await expectNoCursor(mobile, 4);
+  });
+
+  test("the landscape rail draws no cursor or grab dot", async ({ page, isMobile }) => {
+    // The landscape sheet needs a coarse, hover-less pointer: a phone, not a
+    // desktop browser at a wide-and-short size.
+    test.skip(!isMobile, "landscape layout needs a touch device");
+    await page.setViewportSize({ width: 844, height: 390 });
+    await openFixture(page, { id: "desktop-panel", iso: "2026-07-08T00:00:00.000Z" });
+
+    const panel = page.locator("#desktop-panel");
+    await expect(panel.locator(".page.is-fullscreen")).toBeVisible();
+    await expect(panel.locator(".graph-host .readout")).toHaveClass(/is-outside/);
+    // SVG line and dots, plus the rail's HTML cursor line and grab dot.
+    await expectNoCursor(panel, 5);
+
+    // Back inside, the rail's cursor and grab dot return. (The SVG line and
+    // dots are never shown here: the landscape stylesheet hands the cursor to
+    // the rail.)
+    await setSelectedTime(page, "desktop-panel", "2026-07-08T15:00:00.000Z");
+    await expect
+      .poll(async () =>
+        (await cursorParts(panel))
+          .filter((p) => p.part.startsWith("div."))
+          .map((p) => p.shown),
+      )
+      .toEqual([true, true]);
   });
 });
 
