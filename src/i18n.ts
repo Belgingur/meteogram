@@ -64,6 +64,10 @@ export interface Labels {
   /** Tooltip of the station-corrected badge: the station, and the lanes
    *  corrected ("" when unknown) */
   correctedDetail: (station: string, fields: string) => string;
+  /** The host's note that the forecast is for a weather station `km` (one
+   *  decimal, as text) from the centre of `place`. Languages that inflect
+   *  place names lead with the name so it can stay in its dictionary form. */
+  stationPlace: (place: string, km: string) => string;
   monthsShort: string[];
   metaLine: (analysis: string, lastUpdate: string) => string;
 }
@@ -120,6 +124,8 @@ const is: Labels = {
   resize: "Breyta stærð",
   correctedDetail: (station, fields) =>
     `Leiðrétt m.v. mælingar á stöðinni ${station}${fields ? `: ${fields.toLowerCase()}` : ""}`,
+  stationPlace: (place, km) =>
+    `${place}: spá fyrir veðurstöð ${km} km frá miðbænum`,
   monthsShort: [
     "jan", "feb", "mar", "apr", "maí", "jún",
     "júl", "ágú", "sep", "okt", "nóv", "des",
@@ -180,6 +186,8 @@ const en: Labels = {
   resize: "Resize",
   correctedDetail: (station, fields) =>
     `Corrected against observations at ${station}${fields ? `: ${fields.toLowerCase()}` : ""}`,
+  stationPlace: (place, km) =>
+    `Forecast for the weather station ${km} km from ${place} centre`,
   monthsShort: [
     "Jan", "Feb", "Mar", "Apr", "May", "Jun",
     "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
@@ -245,6 +253,8 @@ const es: Labels = {
   resize: "Cambiar tamaño",
   correctedDetail: (station, fields) =>
     `Corregida con observaciones en ${station}${fields ? `: ${fields.toLowerCase()}` : ""}`,
+  stationPlace: (place, km) =>
+    `Pronóstico para la estación meteorológica a ${km} km del centro de ${place}`,
   monthsShort: [
     "ene", "feb", "mar", "abr", "may", "jun",
     "jul", "ago", "sep", "oct", "nov", "dic",
@@ -305,6 +315,8 @@ const pt: Labels = {
   resize: "Redimensionar",
   correctedDetail: (station, fields) =>
     `Corrigida com observações em ${station}${fields ? `: ${fields.toLowerCase()}` : ""}`,
+  stationPlace: (place, km) =>
+    `Previsão para a estação meteorológica a ${km} km do centro de ${place}`,
   monthsShort: [
     "jan", "fev", "mar", "abr", "mai", "jun",
     "jul", "ago", "set", "out", "nov", "dez",
@@ -365,6 +377,8 @@ const pl: Labels = {
   resize: "Zmień rozmiar",
   correctedDetail: (station, fields) =>
     `Skorygowana według pomiarów na stacji ${station}${fields ? `: ${fields.toLowerCase()}` : ""}`,
+  stationPlace: (place, km) =>
+    `${place}: prognoza dla stacji pogodowej ${km} km od centrum`,
   monthsShort: [
     "sty", "lut", "mar", "kwi", "maj", "cze",
     "lip", "sie", "wrz", "paź", "lis", "gru",
@@ -425,6 +439,8 @@ const fo: Labels = {
   resize: "Broyt stødd",
   correctedDetail: (station, fields) =>
     `Rættað eftir mátingum á støðini ${station}${fields ? `: ${fields.toLowerCase()}` : ""}`,
+  stationPlace: (place, km) =>
+    `${place}: veðurforsøgn fyri veðurstøðina ${km} km frá miðbýnum`,
   monthsShort: [
     "jan", "feb", "mar", "apr", "mai", "jun",
     "jul", "aug", "sep", "okt", "nov", "des",

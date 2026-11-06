@@ -500,6 +500,8 @@ input:focus-visible,
 .panel-loc { padding: 0 18px 4px; flex: none; }
 .panel-loc-name { font-size: 24px; font-weight: 900; color: var(--ink); letter-spacing: -0.3px; }
 .panel-loc-sub { font-size: 12px; font-weight: 700; color: var(--haze); }
+/* Host note under the coordinates: the forecast is for a nearby station */
+.loc-note { font-size: 12px; font-weight: 600; color: var(--haze-2); margin-top: 2px; }
 /* Corrected-forecast badge, after the coordinates on the location line */
 .corrected {
   display: inline-flex;

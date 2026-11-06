@@ -33,6 +33,7 @@ import {
   panelTableHtml,
   pillHtml,
   selDayCardHtml,
+  stationPlaceNoteHtml,
   stationRowsHtml,
   type DayGroup,
   type ModelOption,
@@ -196,6 +197,14 @@ function isEditableTarget(target: EventTarget | undefined): boolean {
  *   location-lat    latitude
  *   location-lon    longitude
  *   location-name   optional display name (else nearest station is used)
+ *   station-place   full mode: when the host has moved its point onto a
+ *                   weather station standing in for a place (a city click
+ *                   snapped to the city's station), that place's name…
+ *   station-place-km   …and how far the station is from its centre, in km.
+ *                   With both set, a quiet line under the coordinates says the
+ *                   forecast is for a station that far from the place, in the
+ *                   widget's language. Picking a station in the overlay drops
+ *                   both. Repaints in place; no refetch.
  *   hours           graph window, e.g. 48 or 72 (default 48)
  *   language        "is" (default) | "en" | "fo" | "pl" | "es" | "pt"
  *   hide-language   full mode: leave the language choice out of the settings
@@ -243,6 +252,8 @@ export class BelMeteogram extends HTMLElement {
     "forecast-label",
     "analysis-time",
     "last-updated",
+    "station-place",
+    "station-place-km",
   ];
 
   private root: ShadowRoot;
@@ -493,7 +504,9 @@ export class BelMeteogram extends HTMLElement {
       name === "language" ||
       name === "forecast-label" ||
       name === "analysis-time" ||
-      name === "last-updated"
+      name === "last-updated" ||
+      name === "station-place" ||
+      name === "station-place-km"
     )
       this.paint();
     else this.load();
@@ -1107,6 +1120,11 @@ export class BelMeteogram extends HTMLElement {
             t,
           )
         : "");
+    const note = stationPlaceNoteHtml(
+      this.getAttribute("station-place"),
+      parseFloat(this.getAttribute("station-place-km") ?? ""),
+      t,
+    );
 
     let body = "";
     if (this.status === "loading") {
@@ -1165,6 +1183,7 @@ export class BelMeteogram extends HTMLElement {
            <section class="panel-loc">
              <div class="panel-loc-name">${esc(place)}</div>
              <div class="panel-loc-sub">${sub}</div>
+             ${note}
            </section>
            ${body}
            ${meta}
@@ -1175,6 +1194,7 @@ export class BelMeteogram extends HTMLElement {
            <section class="loc">
              <h1 class="loc-name">${esc(place)}</h1>
              <div class="loc-sub">${sub}</div>
+             ${note}
            </section>
            <div class="pill-wrap">${pillHtml(summary)}</div>
            ${body}
@@ -1622,7 +1642,13 @@ export class BelMeteogram extends HTMLElement {
       if (!row) return;
       const p = places[parseInt(row.dataset.station ?? "", 10)];
       if (!p) return;
+      // The host's name for its point, and its note about the station it was
+      // moved to, describe that point, not the station picked here.
+      this.suppressAttrCallback = true;
       this.removeAttribute("location-name");
+      this.removeAttribute("station-place");
+      this.removeAttribute("station-place-km");
+      this.suppressAttrCallback = false;
       this.pickedPlaceName = p.name;
       this.settingsOpen = false;
       this.query = "";
