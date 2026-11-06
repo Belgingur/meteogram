@@ -628,3 +628,44 @@ test.describe("station-corrected forecast @mobile", () => {
     ]);
   });
 });
+
+test.describe("station-place line @mobile", () => {
+  test("the host's station note shows under the coordinates and goes with a station pick", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await openFixture(page);
+    const panel = page.locator("#desktop-panel");
+    const note = panel.locator(".loc-note");
+    await expect(note).toHaveCount(0);
+
+    await panel.evaluate((el) => {
+      el.setAttribute("station-place", "Reykjavík");
+      el.setAttribute("station-place-km", "2.12");
+    });
+    await expect(note).toHaveText(
+      "Forecast for the weather station 2.1 km from Reykjavík centre",
+    );
+    // A quiet secondary line, right under the coordinates.
+    await expect(panel.locator(".panel-loc-sub + .loc-note")).toHaveCount(1);
+
+    // A station picked in the settings is not the host's point any more.
+    await panel.locator(".pill").click();
+    await panel.locator(".station-list .station").nth(1).click();
+    await expect(note).toHaveCount(0);
+    expect(await panel.evaluate((el) => el.hasAttribute("station-place"))).toBe(false);
+  });
+
+  test("the mobile location block shows it too", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openFixture(page);
+    const widget = page.locator("#mobile-full");
+    await widget.evaluate((el) => {
+      el.setAttribute("station-place", "Borgarnes");
+      el.setAttribute("station-place-km", "0.5");
+    });
+    await expect(widget.locator(".loc-sub + .loc-note")).toHaveText(
+      "Forecast for the weather station 0.5 km from Borgarnes centre",
+    );
+  });
+});

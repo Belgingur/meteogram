@@ -377,6 +377,21 @@ export function correctedBadgeHtml(
   return `<span class="corrected" title="${esc(detail)}" aria-label="${esc(detail)}" role="img">${awardSvg}</span>`;
 }
 
+/**
+ * The host's note that its point is a weather station standing in for a place
+ * (`station-place`, `station-place-km`): one quiet line under the coordinates.
+ * Empty without a place name or a usable distance.
+ */
+export function stationPlaceNoteHtml(
+  place: string | null,
+  km: number,
+  t: Labels,
+): string {
+  const name = place?.trim();
+  if (!name || !Number.isFinite(km) || km < 0) return "";
+  return `<div class="loc-note">${esc(t.stationPlace(name, km.toFixed(1)))}</div>`;
+}
+
 /** Analysis / last-update line below table or graph. */
 export function metaFooterHtml(line: string): string {
   return `<div class="meta-footer">${esc(line)}</div>`;

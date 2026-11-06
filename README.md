@@ -165,6 +165,8 @@ copy of the station's coordinates (a map label, say) should keep them within
 | `domain` | — | Domain integer (schedules only) |
 | `location-lat` / `location-lon` | — | Point to load |
 | `location-name` | _(nearest station)_ | Display name for the location block |
+| `station-place` | — | Full mode: the place a weather station stands in for, when the host has moved its point onto the station (a city click snapped to the city's station). With `station-place-km`, adds a quiet line under the coordinates, in the widget's language: "Forecast for the weather station 2.1 km from Reykjavík centre". Picking a station in the settings drops both |
+| `station-place-km` | — | Full mode: the station's distance from that place's centre, in km (shown with one decimal) |
 | `hours` | `48` | Graph-mode window (e.g. 48 or 72). Ignored in full mode, which takes the whole run |
 | `language` | `is` | `is`, `en`, `fo`, `pl`, `es` or `pt` |
 | `mode` | `graph` | `graph` (card only) or `full` (landing experience) |
