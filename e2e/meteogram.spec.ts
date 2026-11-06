@@ -669,3 +669,313 @@ test.describe("station-place line @mobile", () => {
     );
   });
 });
+
+interface TimeDetail {
+  time: string | null;
+  tempC: number | null;
+  source: "host" | "user";
+}
+
+/** Record the widget's `bel-meteogram-time` and `bel-meteogram-status` events. */
+async function recordEvents(page: Page, id: string): Promise<void> {
+  await page.evaluate((id) => {
+    const w = window as unknown as { times: unknown[]; statuses: unknown[] };
+    w.times = [];
+    w.statuses = [];
+    const el = document.getElementById(id)!;
+    el.addEventListener("bel-meteogram-time", (e) =>
+      w.times.push((e as CustomEvent).detail),
+    );
+    el.addEventListener("bel-meteogram-status", (e) =>
+      w.statuses.push((e as CustomEvent).detail),
+    );
+  }, id);
+}
+
+async function timeEvents(page: Page): Promise<TimeDetail[]> {
+  return page.evaluate(
+    () => (window as unknown as { times: TimeDetail[] }).times,
+  );
+}
+
+async function statusEvents(page: Page): Promise<unknown[]> {
+  return page.evaluate(
+    () => (window as unknown as { statuses: unknown[] }).statuses,
+  );
+}
+
+async function setSelectedTime(
+  page: Page,
+  id: string,
+  iso: string | null,
+): Promise<void> {
+  await page.evaluate(
+    ([id, iso]) => {
+      const el = document.getElementById(id!)!;
+      if (iso === null) el.removeAttribute("selected-time");
+      else el.setAttribute("selected-time", iso);
+    },
+    [id, iso],
+  );
+}
+
+/** The scrub readout's temperature as the reader sees it ("12°" → 12). */
+async function readoutTemp(readout: Locator): Promise<number> {
+  return Number.parseInt((await readout.locator(".ro-temp").textContent()) ?? "", 10);
+}
+
+// The sample run starts at 09:00 UTC on the frozen day (FIXED_TIME − 3 h) and
+// steps hourly, so column = hours since then; "now" (12:00) is column 3.
+test.describe("selected-time", () => {
+  test("moves the desktop readout and cursor without a reload, and reports the readout's temperature", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await openFixture(page);
+
+    const panel = page.locator("#desktop-panel");
+    const slider = panel.locator(".chart-scroll[role='slider']");
+    const readout = panel.locator(".graph-host .readout");
+    const cursor = panel.locator(".chart-plot .scrub-cursor");
+    await expect(slider).toHaveAttribute("aria-valuenow", "3");
+    const nowTemp = await panel.locator(".now-temp").textContent();
+    // The cursor sits at the centre of column 3: x = 3.5 columns.
+    const colW = (await lineX(cursor)) / 3.5;
+    await recordEvents(page, "desktop-panel");
+
+    await setSelectedTime(page, "desktop-panel", "2026-07-09T15:00:00.000Z");
+
+    await expect(slider).toHaveAttribute("aria-valuenow", "30");
+    await expect(readout.locator(".ro-time")).toHaveText(/15:00/);
+    await expect.poll(() => lineX(cursor)).toBeCloseTo(30.5 * colW, 1);
+    // The shown day follows the hour; "the weather now" stays on now.
+    await expect(panel.locator(".day-chip.sel")).toHaveAttribute("data-day", "1");
+    await expect(panel.locator(".now-temp")).toHaveText(nowTemp ?? "");
+    // …and the chart scrolls the new hour into view.
+    const scroll = panel.locator(".chart-scroll");
+    const view = await scroll.evaluate((el) => [el.scrollLeft, el.clientWidth]);
+    const x = await lineX(cursor);
+    expect(x).toBeGreaterThan(view[0]);
+    expect(x).toBeLessThan(view[0] + view[1]);
+
+    const tempC = await readoutTemp(readout);
+    await expect
+      .poll(() => timeEvents(page))
+      .toEqual([{ time: "2026-07-09T15:00:00.000Z", tempC, source: "host" }]);
+    // Paint-only: nothing was refetched.
+    expect(await statusEvents(page)).toEqual([]);
+
+    // The same hour again is not reported twice.
+    await setSelectedTime(page, "desktop-panel", "2026-07-09T15:00:00.000Z");
+    await setSelectedTime(page, "desktop-panel", "2026-07-09T15:10:00.000Z");
+    expect(await timeEvents(page)).toHaveLength(1);
+  });
+
+  test("a time outside the forecast reports nothing and says so in the readout", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await openFixture(page);
+
+    const panel = page.locator("#desktop-panel");
+    const readout = panel.locator(".graph-host .readout");
+    await expect(readout).toBeVisible();
+    await recordEvents(page, "desktop-panel");
+
+    await setSelectedTime(page, "desktop-panel", "2026-08-01T00:00:00.000Z");
+
+    await expect(readout).toHaveClass(/is-outside/);
+    await expect(readout.locator(".ro-time")).toHaveText("No forecast for this time");
+    await expect(readout.locator(".ro-vals")).toBeHidden();
+    await expect(panel.locator(".chart-plot .scrub-cursor")).toHaveAttribute(
+      "visibility",
+      "hidden",
+    );
+    await expect
+      .poll(() => timeEvents(page))
+      .toEqual([{ time: null, tempC: null, source: "host" }]);
+
+    // Back inside: the cursor and values return.
+    await setSelectedTime(page, "desktop-panel", "2026-07-08T18:00:00.000Z");
+    await expect(readout).not.toHaveClass(/is-outside/);
+    await expect(readout.locator(".ro-time")).toHaveText(/18:00/);
+    await expect(panel.locator(".chart-plot .scrub-cursor")).not.toHaveAttribute(
+      "visibility",
+      "hidden",
+    );
+  });
+
+  test("removing the attribute returns to now", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await openFixture(page);
+
+    const panel = page.locator("#desktop-panel");
+    const slider = panel.locator(".chart-scroll[role='slider']");
+    await expect(slider).toHaveAttribute("aria-valuenow", "3");
+    await setSelectedTime(page, "desktop-panel", "2026-07-10T06:00:00.000Z");
+    await expect(slider).toHaveAttribute("aria-valuenow", "45");
+    await expect(panel.locator(".day-chip.sel")).toHaveAttribute("data-day", "2");
+    await recordEvents(page, "desktop-panel");
+
+    await setSelectedTime(page, "desktop-panel", null);
+
+    await expect(slider).toHaveAttribute("aria-valuenow", "3");
+    await expect(slider).toHaveAttribute("aria-valuetext", /12:00/);
+    await expect(panel.locator(".day-chip.sel")).toHaveAttribute("data-day", "0");
+    const tempC = await readoutTemp(panel.locator(".graph-host .readout"));
+    await expect
+      .poll(() => timeEvents(page))
+      .toEqual([{ time: "2026-07-08T12:00:00.000Z", tempC, source: "host" }]);
+  });
+
+  test("a key press reports the reader's hour; a hover only previews it", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await openFixture(page);
+
+    const panel = page.locator("#desktop-panel");
+    const slider = panel.locator(".chart-scroll[role='slider']");
+    const readout = panel.locator(".graph-host .readout");
+    await setSelectedTime(page, "desktop-panel", "2026-07-08T15:00:00.000Z");
+    await expect(slider).toHaveAttribute("aria-valuenow", "6");
+    await recordEvents(page, "desktop-panel");
+
+    await slider.focus();
+    await page.keyboard.press("ArrowRight");
+    await expect(slider).toHaveAttribute("aria-valuenow", "7");
+    const tempC = await readoutTemp(readout);
+    await expect
+      .poll(() => timeEvents(page))
+      .toEqual([{ time: "2026-07-08T16:00:00.000Z", tempC, source: "user" }]);
+
+    // Hovering moves the readout but reports nothing, and leaving puts the
+    // cursor back on the selected hour.
+    const box = await reveal(page, panel.locator(".chart-scroll"));
+    await page.mouse.move(box.x + box.width * 0.85, box.y + box.height / 2);
+    await expect(readout.locator(".ro-time")).not.toHaveText(/16:00/);
+    await page.mouse.move(2, 2);
+    await expect(readout.locator(".ro-time")).toHaveText(/16:00/);
+    expect(await timeEvents(page)).toHaveLength(1);
+
+    // The host's hour is not stored as the reader's own scrub.
+    await page.waitForTimeout(400);
+    const stored = await page.evaluate(() =>
+      JSON.parse(localStorage.getItem("mimirMapPanelState") ?? "{}"),
+    );
+    expect(stored.scrubUtcMs).toBeUndefined();
+  });
+});
+
+test.describe("without selected-time", () => {
+  test("scrubbing works as it always has, and reports committed moves", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await openFixture(page);
+
+    const panel = page.locator("#desktop-panel");
+    const slider = panel.locator(".chart-scroll[role='slider']");
+    const readout = panel.locator(".graph-host .readout");
+    await expect(slider).toHaveAttribute("aria-valuenow", "3");
+    await recordEvents(page, "desktop-panel");
+
+    // A day ahead, into tomorrow. The day chips are the reader's own choice
+    // and a scrub has never moved them; it does not now either.
+    await slider.focus();
+    await page.keyboard.press("PageUp");
+    await expect(slider).toHaveAttribute("aria-valuenow", "27");
+    await expect(readout.locator(".ro-time")).toHaveText(/12:00/);
+    await expect(panel.locator(".day-chip.sel")).toHaveAttribute("data-day", "0");
+    const tempC = await readoutTemp(readout);
+    await expect
+      .poll(() => timeEvents(page))
+      .toEqual([{ time: "2026-07-09T12:00:00.000Z", tempC, source: "user" }]);
+    // Still stored as the reader's scrub, as before.
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => JSON.parse(localStorage.getItem("mimirMapPanelState") ?? "{}").scrubUtcMs,
+        ),
+      )
+      .toBe(Date.parse("2026-07-09T12:00:00Z"));
+
+    // Hover moves the cursor and it stays where the mouse left it; nothing is
+    // reported for a hover.
+    const box = await reveal(page, panel.locator(".chart-scroll"));
+    await page.mouse.move(box.x + box.width * 0.2, box.y + box.height / 2);
+    await expect(readout.locator(".ro-time")).not.toHaveText(/12:00/);
+    const hovered = await readout.locator(".ro-time").textContent();
+    await page.mouse.move(2, 2);
+    await expect(readout.locator(".ro-time")).toHaveText(hovered ?? "");
+    expect(await timeEvents(page)).toHaveLength(1);
+  });
+});
+
+test.describe("selected-time on the phone @mobile", () => {
+  test("moves the pinned readout and cursor, and the day the table shows", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openFixture(page);
+
+    const mobile = page.locator("#mobile-full");
+    await mobile.locator(".tab[data-view='graph']").click();
+    const slider = mobile.locator(".graph-host .scroll[role='slider']");
+    const readout = mobile.locator(".graph-host .readout");
+    await expect(slider).toHaveAttribute("aria-valuenow", "3");
+    await recordEvents(page, "mobile-full");
+
+    await setSelectedTime(page, "mobile-full", "2026-07-09T15:00:00.000Z");
+
+    await expect(slider).toHaveAttribute("aria-valuenow", "30");
+    await expect(readout.locator(".ro-time")).toHaveText(/15:00/);
+    const tempC = await readoutTemp(readout);
+    await expect
+      .poll(() => timeEvents(page))
+      .toEqual([{ time: "2026-07-09T15:00:00.000Z", tempC, source: "host" }]);
+
+    await setSelectedTime(page, "mobile-full", "2026-06-01T00:00:00.000Z");
+    await expect(readout).toHaveClass(/is-outside/);
+    await expect(readout.locator(".ro-time")).toHaveText("No forecast for this time");
+    await expect(mobile.locator(".graph-host .scrub-cursor")).toHaveAttribute(
+      "visibility",
+      "hidden",
+    );
+
+    await setSelectedTime(page, "mobile-full", "2026-07-10T09:00:00.000Z");
+    await mobile.locator(".tab[data-view='table']").click();
+    await expect(mobile.locator(".day-chip.sel")).toHaveAttribute("data-day", "2");
+    expect(await statusEvents(page)).toEqual([]);
+  });
+});
+
+test.describe("selected-time in a non-UTC browser", () => {
+  test.use({ timezoneId: "Europe/Warsaw" });
+
+  test("selects the same absolute hour", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await openFixture(page);
+
+    const panel = page.locator("#desktop-panel");
+    const slider = panel.locator(".chart-scroll[role='slider']");
+    await expect(slider).toHaveAttribute("aria-valuenow", "3");
+    expect(
+      await page.evaluate(() => new Date("2026-07-09T15:00:00Z").getTimezoneOffset()),
+    ).toBe(-120);
+    await recordEvents(page, "desktop-panel");
+
+    await setSelectedTime(page, "desktop-panel", "2026-07-09T15:00:00.000Z");
+    await expect(slider).toHaveAttribute("aria-valuenow", "30");
+    // The sample point's clock is UTC; the browser's +2 h must not shift it.
+    await expect(panel.locator(".graph-host .ro-time")).toHaveText(/15:00/);
+    await expect
+      .poll(async () => (await timeEvents(page)).map((e) => e.time))
+      .toEqual(["2026-07-09T15:00:00.000Z"]);
+
+    // The same instant written with Warsaw's offset is the same hour.
+    await setSelectedTime(page, "desktop-panel", "2026-07-09T17:00:00+02:00");
+    await expect(slider).toHaveAttribute("aria-valuenow", "30");
+    expect(await timeEvents(page)).toHaveLength(1);
+  });
+});
