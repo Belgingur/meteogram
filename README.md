@@ -167,6 +167,7 @@ copy of the station's coordinates (a map label, say) should keep them within
 | `location-name` | _(nearest station)_ | Display name for the location block |
 | `station-place` | — | Full mode: the place a weather station stands in for, when the host has moved its point onto the station (a city click snapped to the city's station). With `station-place-km`, adds a quiet line under the coordinates, in the widget's language: "Forecast for the weather station 2.1 km from Reykjavík centre". Picking a station in the settings drops both |
 | `station-place-km` | — | Full mode: the station's distance from that place's centre, in km (shown with one decimal) |
+| `selected-time` | _(now)_ | The hour a host's timeline points at, as an absolute UTC ISO 8601 instant (`2026-11-09T15:00:00.000Z`). Moves the graph cursor, the scrub readout and the shown day (not "the weather now") to the nearest column within half a timestep, hours already passed included. A time the forecast does not cover hides the cursor and the readout says "No forecast for this time". Removing it returns to the current hour. Repaints in place without a refetch, so it can follow a timeline in playback; it is not persisted as the reader's own scrub. Reports back with `bel-meteogram-time` |
 | `hours` | `48` | Graph-mode window (e.g. 48 or 72). Ignored in full mode, which takes the whole run |
 | `language` | `is` | `is`, `en`, `fo`, `pl`, `es` or `pt` |
 | `mode` | `graph` | `graph` (card only) or `full` (landing experience) |
@@ -205,6 +206,30 @@ const el = document.querySelector("bel-meteogram");
 el.addEventListener("bel-meteogram-location", (e) => {
   const { lat, lon, name, tempC } = e.detail;
   movePin(lat, lon, `${name} · ${tempC}°`); // host-owned map pin
+});
+```
+
+`bel-meteogram-time` — a `CustomEvent` fired whenever the selected hour
+changes, with `detail: { time, tempC, source }`. `time` is the selected
+column's instant as an ISO UTC string, or `null` when `selected-time` is outside
+the forecast; `tempC` is the temperature exactly as the panel's readout shows it
+(whole degrees), or `null` when outside or missing. `source` is `"host"` after
+`selected-time` changes (or is removed) and after a load completes with it set,
+so a newly loaded point reports its value; and `"user"` when the reader moves the
+selection themselves — an arrow key, a tap or click on the chart, the end of a
+drag, or the landscape scrub rail. A mouse hovering over the desktop chart only
+previews an hour and is never reported. An unchanged selection is not reported
+twice. It bubbles and is `composed`. A host timeline can drive the panel and
+follow it back:
+
+```js
+timeline.on("change", (date) =>
+  el.setAttribute("selected-time", date.toISOString()),
+);
+el.addEventListener("bel-meteogram-time", (e) => {
+  const { time, tempC, source } = e.detail;
+  setPinLabel(tempC === null ? "" : `${tempC}°`);
+  if (source === "user" && time) timeline.setTime(new Date(time));
 });
 ```
 

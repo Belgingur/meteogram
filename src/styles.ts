@@ -113,6 +113,10 @@ input:focus-visible,
   padding: 9px 14px;
 }
 .ro-time { font-size: 11px; font-weight: 800; color: var(--haze); }
+/* A host-chosen time the forecast does not cover: the readout drops its values
+   and says so in one quiet line, and the cursor is hidden (see columnAtTime). */
+.readout.is-outside .ro-vals, .readout.is-outside .ro-icon { display: none; }
+.readout.is-outside .ro-time { font-size: 13px; line-height: 22px; }
 .ro-vals {
   display: flex;
   align-items: baseline;

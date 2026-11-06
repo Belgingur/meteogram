@@ -68,6 +68,8 @@ export interface Labels {
    *  decimal, as text) from the centre of `place`. Languages that inflect
    *  place names lead with the name so it can stay in its dictionary form. */
   stationPlace: (place: string, km: string) => string;
+  /** Scrub readout when the host's `selected-time` is outside the forecast */
+  noForecastForTime: string;
   monthsShort: string[];
   metaLine: (analysis: string, lastUpdate: string) => string;
 }
@@ -126,6 +128,7 @@ const is: Labels = {
     `Leiðrétt m.v. mælingar á stöðinni ${station}${fields ? `: ${fields.toLowerCase()}` : ""}`,
   stationPlace: (place, km) =>
     `${place}: spá fyrir veðurstöð ${km} km frá miðbænum`,
+  noForecastForTime: "Engin spá fyrir þennan tíma",
   monthsShort: [
     "jan", "feb", "mar", "apr", "maí", "jún",
     "júl", "ágú", "sep", "okt", "nóv", "des",
@@ -188,6 +191,7 @@ const en: Labels = {
     `Corrected against observations at ${station}${fields ? `: ${fields.toLowerCase()}` : ""}`,
   stationPlace: (place, km) =>
     `Forecast for the weather station ${km} km from ${place} centre`,
+  noForecastForTime: "No forecast for this time",
   monthsShort: [
     "Jan", "Feb", "Mar", "Apr", "May", "Jun",
     "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
@@ -255,6 +259,7 @@ const es: Labels = {
     `Corregida con observaciones en ${station}${fields ? `: ${fields.toLowerCase()}` : ""}`,
   stationPlace: (place, km) =>
     `Pronóstico para la estación meteorológica a ${km} km del centro de ${place}`,
+  noForecastForTime: "No hay pronóstico para esta hora",
   monthsShort: [
     "ene", "feb", "mar", "abr", "may", "jun",
     "jul", "ago", "sep", "oct", "nov", "dic",
@@ -317,6 +322,7 @@ const pt: Labels = {
     `Corrigida com observações em ${station}${fields ? `: ${fields.toLowerCase()}` : ""}`,
   stationPlace: (place, km) =>
     `Previsão para a estação meteorológica a ${km} km do centro de ${place}`,
+  noForecastForTime: "Sem previsão para esta hora",
   monthsShort: [
     "jan", "fev", "mar", "abr", "mai", "jun",
     "jul", "ago", "set", "out", "nov", "dez",
@@ -379,6 +385,7 @@ const pl: Labels = {
     `Skorygowana według pomiarów na stacji ${station}${fields ? `: ${fields.toLowerCase()}` : ""}`,
   stationPlace: (place, km) =>
     `${place}: prognoza dla stacji pogodowej ${km} km od centrum`,
+  noForecastForTime: "Brak prognozy na tę godzinę",
   monthsShort: [
     "sty", "lut", "mar", "kwi", "maj", "cze",
     "lip", "sie", "wrz", "paź", "lis", "gru",
@@ -441,6 +448,7 @@ const fo: Labels = {
     `Rættað eftir mátingum á støðini ${station}${fields ? `: ${fields.toLowerCase()}` : ""}`,
   stationPlace: (place, km) =>
     `${place}: veðurforsøgn fyri veðurstøðina ${km} km frá miðbýnum`,
+  noForecastForTime: "Eingin spá fyri hesa tíðina",
   monthsShort: [
     "jan", "feb", "mar", "apr", "mai", "jun",
     "jul", "aug", "sep", "okt", "nov", "des",

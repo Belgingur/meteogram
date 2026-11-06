@@ -202,6 +202,65 @@ export function indexAtInstant(
   return bd <= stepMs / 2 ? best : -1;
 }
 
+/**
+ * Column of `points` a host-chosen instant selects (the `selected-time`
+ * attribute), or -1 when the forecast has no column for it.
+ *
+ * Unlike {@link indexAtInstant} this takes hours that have already passed: a
+ * host timeline set to earlier today must still select that hour if the run
+ * has it. The instant takes the nearest column (the earlier one on an exact
+ * tie) while it is within half a timestep of it, measured from the spacing on
+ * the instant's side, because a run can step hourly at first and 3-hourly
+ * later. Beyond half a step before the first column or past the last, the
+ * instant is outside this forecast.
+ */
+export function columnAtTime(points: HourPoint[], utcMs: number): number {
+  if (!points.length || !Number.isFinite(utcMs)) return -1;
+  let best = 0;
+  let bd = Infinity;
+  for (let i = 0; i < points.length; i++) {
+    const d = Math.abs(points[i].utcMs - utcMs);
+    if (d < bd) {
+      bd = d;
+      best = i;
+    }
+  }
+  const at = points[best].utcMs;
+  const side = utcMs >= at ? points[best + 1] : points[best - 1];
+  const neighbour = side ?? points[best - 1] ?? points[best + 1];
+  const stepMs = neighbour ? Math.abs(neighbour.utcMs - at) : 3_600_000;
+  return bd <= stepMs / 2 ? best : -1;
+}
+
+/** Who moved the selected hour: the host's `selected-time`, or the reader. */
+export type TimeSource = "host" | "user";
+
+/** Detail of the `bel-meteogram-time` event. */
+export interface TimeEventDetail {
+  /** ISO UTC instant of the selected column; null outside the forecast */
+  time: string | null;
+  /** Temperature as the readout shows it (whole degrees); null when unknown */
+  tempC: number | null;
+  source: TimeSource;
+}
+
+/**
+ * The `bel-meteogram-time` detail for column `idx` (-1 = outside the
+ * forecast). The temperature is rounded exactly as the scrub readout rounds
+ * it, so a host pin and the panel can never disagree by a degree.
+ */
+export function timeEventDetail(
+  points: HourPoint[],
+  idx: number,
+  source: TimeSource,
+): TimeEventDetail {
+  const p = idx >= 0 ? points[idx] : undefined;
+  if (!p) return { time: null, tempC: null, source };
+  // `+ 0` folds -0 (Math.round(-0.4)) into 0, which the readout prints as "0°".
+  const tempC = p.tempC === null ? null : Math.round(p.tempC) + 0;
+  return { time: new Date(p.utcMs).toISOString(), tempC, source };
+}
+
 function laneChip(translateY: number, swatch: string, label: string): string {
   return (
     `<div class="lane-chip-wrap" style="transform:translateY(${translateY}px)">` +
@@ -216,16 +275,25 @@ function laneChip(translateY: number, swatch: string, label: string): string {
  * on the plot picks that hour and a drag along the strip around the track
  * scrubs continuously; dragging elsewhere pans the chart, which is several
  * screens wide.
+ *
+ * `onScrub` hears every cursor move; `committed` is true for the deliberate
+ * ones (a key, a tap or click, the end of a drag) and false for a mouse merely
+ * hovering. An `initialIdx` of -1 opens on the "outside this forecast" state
+ * (see {@link columnAtTime}). While `previewHover()` holds, a hover is only a
+ * preview: the cursor returns to the last committed column when the mouse
+ * leaves.
  */
 export function renderGraphCard(
   host: HTMLElement,
   points: HourPoint[],
   t: Labels,
   initialIdx: number,
-  onScrub?: (idx: number) => void,
-  opts: { bare?: boolean; compact?: boolean } = {},
-): void {
-  let idx = Math.max(0, Math.min(points.length - 1, initialIdx));
+  onScrub?: (idx: number, committed: boolean) => void,
+  opts: { bare?: boolean; compact?: boolean; previewHover?: () => boolean } = {},
+): { setScrubIdx: (i: number) => void } {
+  // -1 is "outside this forecast": no cursor, and the readout says so.
+  let idx = initialIdx < 0 ? -1 : Math.min(points.length - 1, initialIdx);
+  let committedIdx = idx;
   const layout = opts.compact ? LAYOUT_COMPACT : LAYOUT_FULL;
   const { svg, axisSvg, rightAxisSvg, geo } = buildMeteogram(
     points,
@@ -322,9 +390,22 @@ export function renderGraphCard(
   // unchanged symbol makes it blink on slower phones mid-drag.
   let shownDir: number | null | undefined;
   let shownSymbol: string | undefined;
+  const readout = q<HTMLElement>(".readout");
 
   const update = (): void => {
     const p = points[idx];
+    const outside = !p;
+    readout.classList.toggle("is-outside", outside);
+    for (const el of [cursor, handle, dotTemp, dotWind]) {
+      if (outside) el.setAttribute("visibility", "hidden");
+      else el.removeAttribute("visibility");
+    }
+    if (outside) {
+      roTime.textContent = t.noForecastForTime;
+      scroller.removeAttribute("aria-valuenow");
+      scroller.setAttribute("aria-valuetext", t.noForecastForTime);
+      return;
+    }
     const x = geo.cx(idx);
 
     cursor.setAttribute("x1", `${x}`);
@@ -415,22 +496,35 @@ export function renderGraphCard(
     }
   }
 
-  const scrubFrom = (e: PointerEvent): void => {
+  const scrubFrom = (e: PointerEvent, committed = false): void => {
     const rect = svgEl.getBoundingClientRect();
     const i = geo.indexAt(e.clientX - rect.left);
     if (i !== idx) {
       idx = i;
       update();
-      onScrub?.(i);
+      onScrub?.(i, false);
     }
+    // A commit reports even an unmoved cursor: a hover may have put it there.
+    if (committed) commit();
+  };
+  const commit = (): void => {
+    committedIdx = idx;
+    onScrub?.(idx, true);
   };
 
-  // Mouse: any hover/press over the SVG moves the cursor
+  // Mouse: any hover/press over the SVG moves the cursor; a press commits.
   svgEl.addEventListener("pointermove", (e) => {
     if (e.pointerType === "mouse") scrubFrom(e);
   });
   svgEl.addEventListener("pointerdown", (e) => {
-    if (e.pointerType === "mouse") scrubFrom(e);
+    if (e.pointerType === "mouse") scrubFrom(e, true);
+  });
+  svgEl.addEventListener("pointerleave", (e) => {
+    if (!opts.previewHover?.() || e.pointerType !== "mouse" || e.buttons) return;
+    if (idx === committedIdx) return;
+    idx = committedIdx;
+    update();
+    onScrub?.(idx, false);
   });
 
   // Touch: a TAP anywhere on the plot picks that hour.
@@ -441,7 +535,7 @@ export function renderGraphCard(
   // only by accident, asking for precision from exactly the readers least able
   // to give it. A tap costs the pan nothing (a pan is a drag) and makes the
   // obvious gesture — touching the hour you want — work.
-  wireTapToScrub(svgEl, scrubFrom);
+  wireTapToScrub(svgEl, (e) => scrubFrom(e, true));
 
   // Keyboard: the scroller is the slider (role, value and label in the markup
   // above). Moving off-screen scrolls the cursor back into view, one lead-in
@@ -455,25 +549,50 @@ export function renderGraphCard(
     if (next === idx) return;
     idx = next;
     update();
-    onScrub?.(idx);
+    onScrub?.(idx, false);
+    commit();
+    scrollIntoView();
+  });
+  const scrollIntoView = (): void => {
+    if (idx < 0) return;
     const x = geo.cx(idx);
     const pad = CURSOR_LEAD_COLUMNS * layout.colW;
     if (x < scroller.scrollLeft + pad) scroller.scrollLeft = x - pad;
     else if (x > scroller.scrollLeft + scroller.clientWidth - pad)
       scroller.scrollLeft = x - scroller.clientWidth + pad;
-  });
+  };
 
-  // …and dragging along the strip around the track still scrubs continuously.
+  // …and dragging along the strip around the track still scrubs continuously,
+  // committing where the drag lets go.
   const hit = host.querySelector(".scrub-hit") as SVGRectElement;
+  let dragging = false;
   hit.addEventListener("pointerdown", (e) => {
     try {
       hit.setPointerCapture(e.pointerId);
     } catch {
       /* not supported */
     }
+    dragging = true;
     scrubFrom(e);
   });
   hit.addEventListener("pointermove", (e) => {
     if (e.buttons > 0) scrubFrom(e);
   });
+  const endDrag = (): void => {
+    if (!dragging) return;
+    dragging = false;
+    commit();
+  };
+  hit.addEventListener("pointerup", endDrag);
+  hit.addEventListener("pointercancel", endDrag);
+
+  return {
+    // Host-driven: moves the cursor without reporting back (-1 = outside).
+    setScrubIdx: (i: number) => {
+      idx = i < 0 ? -1 : Math.min(points.length - 1, i);
+      committedIdx = idx;
+      update();
+      scrollIntoView();
+    },
+  };
 }

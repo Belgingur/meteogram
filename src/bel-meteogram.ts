@@ -12,11 +12,14 @@ import {
 } from "./api";
 import { distanceKm } from "./geo";
 import {
+  columnAtTime,
   forecastSpanLabel,
   indexAtInstant,
   nowIndex,
   nowMarkerIndex,
   renderGraphCard,
+  timeEventDetail,
+  type TimeSource,
 } from "./graph-card";
 import { labels, type Labels } from "./i18n";
 import {
@@ -205,6 +208,14 @@ function isEditableTarget(target: EventTarget | undefined): boolean {
  *                   forecast is for a station that far from the place, in the
  *                   widget's language. Picking a station in the overlay drops
  *                   both. Repaints in place; no refetch.
+ *   selected-time   the hour a host's timeline points at, as an absolute UTC
+ *                   ISO 8601 instant (e.g. 2026-11-09T15:00:00.000Z). Moves
+ *                   the selected hour — the graph cursor, the scrub readout and
+ *                   the shown day — but not "the weather now". A time the
+ *                   forecast does not cover hides the cursor and says so in
+ *                   the readout. Removing it returns to the current hour.
+ *                   Repaints in place; no refetch, so a host can step it on
+ *                   every timeline tick. Not persisted as the reader's scrub.
  *   hours           graph window, e.g. 48 or 72 (default 48)
  *   language        "is" (default) | "en" | "fo" | "pl" | "es" | "pt"
  *   hide-language   full mode: leave the language choice out of the settings
@@ -235,6 +246,17 @@ function isEditableTarget(target: EventTarget | undefined): boolean {
  *                           overlay or set via loadChartLocation(). Bubbles and
  *                           is composed so hosts can listen on the element or
  *                           an ancestor/document.
+ *   "bel-meteogram-time"    CustomEvent fired whenever the selected hour
+ *                           changes, with detail { time, tempC, source }:
+ *                           `time` the selected column's ISO UTC instant (null
+ *                           when `selected-time` is outside the forecast),
+ *                           `tempC` the temperature as the readout shows it
+ *                           (null when outside or missing), and `source` "host"
+ *                           (after `selected-time` changes, or a load completes
+ *                           with it set) or "user" (a key, tap, click, the end
+ *                           of a drag or a rail change — never a mouse hover).
+ *                           An unchanged selection is not reported twice.
+ *                           Bubbles and is composed.
  *
  * Theming (CSS custom properties, full mode):
  *   --bel-meteogram-bg        page background (default #E7EFF7)
@@ -254,6 +276,7 @@ export class BelMeteogram extends HTMLElement {
     "last-updated",
     "station-place",
     "station-place-km",
+    "selected-time",
   ];
 
   private root: ShadowRoot;
@@ -287,6 +310,16 @@ export class BelMeteogram extends HTMLElement {
    * restoreScrubIndex.
    */
   private scrubUtcMs: number | null = null;
+  /**
+   * The instant the host's `selected-time` selects, or null when the host does
+   * not drive the time. Kept apart from `scrubUtcMs` so a host-set time is never
+   * persisted as the reader's own scrub (a reload would then fight the host). A
+   * committed scrub by the reader moves it too, so a repaint keeps their hour
+   * until the host answers with a new `selected-time`.
+   */
+  private hostTimeMs: number | null = null;
+  /** The last `bel-meteogram-time` reported (time|tempC), to skip repeats. */
+  private lastTimeKey: string | null = null;
   /** Desktop (two-column) layout when the viewport is ≥ 900px */
   private isWide = false;
   /** Map panel: draggable position within the host */
@@ -355,9 +388,8 @@ export class BelMeteogram extends HTMLElement {
     } else {
       return;
     }
-    this.noteScrub(gp, idx);
     this.graphScrubSetter?.(idx);
-    this.persistScrubSoon();
+    this.onUserScrub(gp, idx, true);
   };
   private readonly mql = matchMedia("(min-width: 900px)");
   private readonly onBreakpoint = (): void => {
@@ -460,6 +492,7 @@ export class BelMeteogram extends HTMLElement {
     this.mqlLandscape.addEventListener("change", this.onLandscape);
     document.addEventListener("keydown", this.onKeyDown);
     window.addEventListener("resize", this.onResize);
+    this.hostTimeMs = this.selectedTimeAttr();
     this.load();
     // First render can see a stale width/orientation in some embeds; re-check
     // after mount.
@@ -499,6 +532,10 @@ export class BelMeteogram extends HTMLElement {
 
   attributeChangedCallback(name: string): void {
     if (!this.started || this.suppressAttrCallback) return;
+    if (name === "selected-time") {
+      this.applySelectedTime();
+      return;
+    }
     // These only change rendered strings (labels / meta footer), not the data.
     if (
       name === "language" ||
@@ -561,9 +598,14 @@ export class BelMeteogram extends HTMLElement {
     clearTimeout(this.persistTimer);
     this.persistTimer = 0;
     if (!this.isFull || !this.usesPanel) return;
+    // While a host drives the time, the day and hour on screen are the host's,
+    // not the reader's: leave the reader's stored ones as they were.
+    const time: MapPanelPersisted =
+      this.hostTimeMs === null
+        ? { selectedDay: this.selectedDay, scrubUtcMs: this.scrubUtcMs ?? undefined }
+        : {};
     writeMapPanelState({
-      selectedDay: this.selectedDay,
-      scrubUtcMs: this.scrubUtcMs ?? undefined,
+      ...time,
       view: this.view,
       panelPos:
         this.panelPos.x >= 0
@@ -708,6 +750,9 @@ export class BelMeteogram extends HTMLElement {
     // paint() resolve the instant against whatever actually arrives; if it no
     // longer fits, restoreScrubIndex declines and we open at now.
     this.scrubIdx = -1;
+    // A finished load reports the host's hour afresh: the point (and so its
+    // temperature) may be new even where the instant is not.
+    this.lastTimeKey = null;
 
     if (this.hasAttribute("sample")) {
       this.corrections = [];
@@ -731,9 +776,11 @@ export class BelMeteogram extends HTMLElement {
         Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
       );
       this.status = "ready";
+      this.followHostTime();
       this.paint();
       this.emitStatus();
       this.emitLocation();
+      this.emitHostTime();
       return;
     }
 
@@ -814,9 +861,13 @@ export class BelMeteogram extends HTMLElement {
       this.analysisTime = times.analysisTime;
       this.lastModified = times.lastModified;
       this.status = this.points.length ? "ready" : "error";
+      if (this.status === "ready") this.followHostTime();
       this.paint();
       this.emitStatus(this.points.length ? undefined : "empty forecast");
-      if (this.status === "ready") this.emitLocation();
+      if (this.status === "ready") {
+        this.emitLocation();
+        this.emitHostTime();
+      }
     } catch (err) {
       if (token !== this.loadToken) return;
       console.error("bel-meteogram: failed to load forecast", err);
@@ -949,6 +1000,7 @@ export class BelMeteogram extends HTMLElement {
 
   private paintGraph(): void {
     const t = this.t;
+    this.graphScrubSetter = null;
     const head = `
       <div class="head">
         <div class="title">${esc(forecastSpanLabel(this.points, t) || t.nextHours(this.hours))}</div>
@@ -968,12 +1020,18 @@ export class BelMeteogram extends HTMLElement {
     // This series starts at the analysis time, so "now" is a column in, not
     // column 0 — and a restored scrub resolves against THIS window rather than
     // whichever one wrote it.
-    const carried =
-      this.scrubIdx >= 0 ? this.scrubIdx : this.restoreScrubIndex(this.points);
-    const initial = carried >= 0 ? carried : nowIndex(this.points);
-    renderGraphCard(this.body, this.points, t, initial, (i) => {
-      this.noteScrub(this.points, i);
-    });
+    const points = this.points;
+    const initial = this.selectedColumn(points);
+    this.renderedScrubIdx = initial;
+    const { setScrubIdx } = renderGraphCard(
+      this.body,
+      points,
+      t,
+      initial,
+      (i, committed) => this.onUserScrub(points, i, committed),
+      { previewHover: () => this.hostTimeMs !== null },
+    );
+    this.graphScrubSetter = setScrubIdx;
   }
 
   private models(): ModelOption[] {
@@ -1057,6 +1115,115 @@ export class BelMeteogram extends HTMLElement {
     if (!p) return;
     this.scrubIdx = i;
     this.scrubUtcMs = p.utcMs;
+  }
+
+  /** The `selected-time` attribute as epoch ms, or null when absent or not a
+   *  date. Read as an absolute instant: an ISO string without an offset would
+   *  be local time, which is why hosts pass UTC ("…Z"). */
+  private selectedTimeAttr(): number | null {
+    const raw = this.getAttribute("selected-time");
+    if (!raw) return null;
+    const ms = Date.parse(raw);
+    return Number.isFinite(ms) ? ms : null;
+  }
+
+  /**
+   * The selected column of `points`: the host's hour while it drives the time
+   * (-1 when the forecast has no column for it), otherwise the reader's scrub,
+   * or "now".
+   */
+  private selectedColumn(points: HourPoint[]): number {
+    if (this.hostTimeMs !== null) return columnAtTime(points, this.hostTimeMs);
+    const carried =
+      this.scrubIdx >= 0 ? this.scrubIdx : this.restoreScrubIndex(points);
+    return Math.max(
+      0,
+      Math.min(points.length - 1, carried >= 0 ? carried : nowIndex(points)),
+    );
+  }
+
+  /**
+   * `selected-time` changed: move the selection in place, without a reload. A
+   * timeline in playback sets this on every step, so the common case only moves
+   * the mounted chart's cursor and readout; the panel is repainted only when
+   * the hour crosses into another day and the day chips must follow.
+   */
+  private applySelectedTime(): void {
+    this.hostTimeMs = this.selectedTimeAttr();
+    // Whatever the reader scrubbed before is not what is selected now; with the
+    // attribute gone the selection goes back to the current hour.
+    this.scrubIdx = -1;
+    if (this.hostTimeMs === null) this.scrubUtcMs = null;
+    // Mid-load there is nothing to move; the load reports the hour when done.
+    if (this.status !== "ready" || !this.points.length) return;
+    const gp = this.graphPoints();
+    const col = this.selectedColumn(gp);
+    // paint() keeps the chart's old scroll position, so the setter still runs
+    // after it: that is what brings the new hour into view.
+    if (this.followSelectedDay(gp, col) && this.body.querySelector(".day-chip")) {
+      this.paint();
+    }
+    this.graphScrubSetter?.(col);
+    this.renderedScrubIdx = col;
+    this.emitTime(gp, col, "host");
+  }
+
+  /** Before a fresh paint: show the day holding the host's hour. */
+  private followHostTime(): void {
+    if (this.hostTimeMs === null) return;
+    const gp = this.graphPoints();
+    this.followSelectedDay(gp, this.selectedColumn(gp));
+  }
+
+  /** After a load: report the host's hour against the new series. */
+  private emitHostTime(): void {
+    if (this.hostTimeMs === null) return;
+    const gp = this.graphPoints();
+    this.emitTime(gp, this.selectedColumn(gp), "host");
+  }
+
+  /** Point the day chips / table at the day holding column `col`. True when
+   *  the day changed. Hours outside the listed days leave it alone. */
+  private followSelectedDay(points: HourPoint[], col: number): boolean {
+    const p = points[col];
+    if (!this.isFull || !p) return false;
+    const days = groupDays(this.points, this.t, nowIndex(this.points));
+    const day = days.findIndex((d) => d.hours.includes(p));
+    if (day < 0 || day === this.selectedDay) return false;
+    this.selectedDay = day;
+    return true;
+  }
+
+  /**
+   * The reader moved the cursor. Without a host driving the time this is the
+   * reader's own scrub, remembered and persisted as before. While a host drives
+   * it, a hover is only a preview and a committed move becomes the selection.
+   * Committed moves are reported either way, so a host can follow the reader.
+   */
+  private onUserScrub(points: HourPoint[], i: number, committed: boolean): void {
+    this.renderedScrubIdx = i;
+    if (this.hostTimeMs === null) {
+      this.noteScrub(points, i);
+      this.persistScrubSoon();
+    } else if (committed && points[i]) {
+      this.hostTimeMs = points[i].utcMs;
+    }
+    if (committed) this.emitTime(points, i, "user");
+  }
+
+  /** Fire `bel-meteogram-time` for column `col`, unless it repeats the last. */
+  private emitTime(points: HourPoint[], col: number, source: TimeSource): void {
+    const detail = timeEventDetail(points, col, source);
+    const key = `${detail.time}|${detail.tempC}`;
+    if (key === this.lastTimeKey) return;
+    this.lastTimeKey = key;
+    this.dispatchEvent(
+      new CustomEvent("bel-meteogram-time", {
+        detail,
+        bubbles: true,
+        composed: true,
+      }),
+    );
   }
 
   /**
@@ -1227,22 +1394,15 @@ export class BelMeteogram extends HTMLElement {
       // The window opens at the run's start, not at "now", so the current hour
       // is a column part-way in — both the cursor's home and what the "now"
       // marker is drawn against.
-      const nowI = nowIndex(gp);
-      const carried =
-        this.scrubIdx >= 0 ? this.scrubIdx : this.restoreScrubIndex(gp);
-      const initial = Math.max(
-        0,
-        Math.min(gp.length - 1, carried >= 0 ? carried : nowI),
-      );
+      const initial = this.selectedColumn(gp);
       this.renderedScrubIdx = initial;
+      const previewHover = (): boolean => this.hostTimeMs !== null;
       if (wide) {
         const { setScrubIdx } = renderMapPanelGraph(host, gp, {
           scrubIdx: initial,
           nowIdx: nowMarkerIndex(gp),
-          onScrub: (i) => {
-            this.noteScrub(gp, i);
-            this.persistScrubSoon();
-          },
+          onScrub: (i, committed) => this.onUserScrub(gp, i, committed),
+          previewHover,
           onFullscreen: () => {
             // The graph's toggle grows/shrinks the same panel in place.
             if (this.isExpanded()) this.collapsePanel();
@@ -1264,10 +1424,15 @@ export class BelMeteogram extends HTMLElement {
         });
         this.graphScrubSetter = setScrubIdx;
       } else {
-        renderGraphCard(host, gp, t, initial, (i) => {
-          this.noteScrub(gp, i);
-        });
-        this.graphScrubSetter = null;
+        const { setScrubIdx } = renderGraphCard(
+          host,
+          gp,
+          t,
+          initial,
+          (i, committed) => this.onUserScrub(gp, i, committed),
+          { previewHover },
+        );
+        this.graphScrubSetter = setScrubIdx;
       }
     } else {
       this.renderedGraphPoints = [];

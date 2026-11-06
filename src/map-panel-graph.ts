@@ -727,7 +727,13 @@ export interface MapPanelGraphOptions {
   scrubIdx: number;
   /** Column holding "now"; -1 when now is outside the run (no marker) */
   nowIdx: number;
-  onScrub: (idx: number) => void;
+  /** Every cursor move; `committed` is true for a key, a tap or click, the end
+   *  of a drag or a rail change, and false for a mouse merely hovering. */
+  onScrub: (idx: number, committed: boolean) => void;
+  /** While true, hover only previews: the cursor returns to the last
+   *  committed column when the mouse leaves the plot (asked live, because a
+   *  host can start driving the time without the chart being rebuilt). */
+  previewHover?: () => boolean;
   onFullscreen?: () => void;
   fullscreen?: boolean;
   onExitFullscreen?: () => void;
@@ -742,14 +748,21 @@ export interface MapPanelGraphOptions {
   t: Labels;
 }
 
+/**
+ * Pointer scrubbing on `el`. A press or drag moves the cursor and commits where
+ * it lets go; a mouse hovering with no button down moves it without
+ * committing, so a host listening for committed moves is not driven by every
+ * mouse sweep.
+ */
 function wireScrub(
   el: Element,
   geo: ChartGeometry,
   getIdx: () => number,
   setIdx: (i: number) => void,
-  onScrub: (i: number) => void,
+  onScrub: (i: number, committed: boolean) => void,
   update: () => void,
   displayScale: () => number = () => 1,
+  commit: () => void = () => {},
 ): void {
   const scrubFrom = (e: PointerEvent): void => {
     const rect = el.getBoundingClientRect();
@@ -758,21 +771,30 @@ function wireScrub(
     if (i !== getIdx()) {
       setIdx(i);
       update();
-      onScrub(i);
+      onScrub(i, false);
     }
   };
+  let pressed = false;
   el.addEventListener("pointerdown", (e) => {
     try {
       el.setPointerCapture((e as PointerEvent).pointerId);
     } catch {
       /* unsupported */
     }
+    pressed = true;
     scrubFrom(e as PointerEvent);
   });
   el.addEventListener("pointermove", (e) => {
     const pe = e as PointerEvent;
     if (pe.pointerType === "mouse" || pe.buttons > 0) scrubFrom(pe);
   });
+  const release = (): void => {
+    if (!pressed) return;
+    pressed = false;
+    commit();
+  };
+  el.addEventListener("pointerup", release);
+  el.addEventListener("pointercancel", release);
 }
 
 function scrollToScrub(
@@ -1021,7 +1043,9 @@ export function renderMapPanelGraph(
     }
   }
 
-  let idx = Math.max(0, Math.min(points.length - 1, opts.scrubIdx));
+  // -1 is "outside this forecast": no cursor, and the readout says so.
+  let idx = opts.scrubIdx < 0 ? -1 : Math.min(points.length - 1, opts.scrubIdx);
+  let committedIdx = idx;
   const plot = host.querySelector<SVGSVGElement>(".chart-plot")!;
   const scroll = host.querySelector<HTMLElement>(".chart-scroll")!;
   const fitEl = host.querySelector<HTMLElement>(".chart-fit");
@@ -1049,7 +1073,7 @@ export function renderMapPanelGraph(
       // while the plot body below stays free to pan horizontally.
       rail.style.height = `${Math.round(L.plotTop * s)}px`;
       if (grab) grab.style.top = `${Math.round(L.plotTop * s - 5.5)}px`;
-      if (railCursor) railCursor.style.left = `${geo.cx(idx) * s}px`;
+      if (railCursor && idx >= 0) railCursor.style.left = `${geo.cx(idx) * s}px`;
     }
   };
   const { geo } = buildPlotSvg(
@@ -1074,12 +1098,28 @@ export function renderMapPanelGraph(
   const roArrow = q<HTMLElement>(".ro-arrow");
   const roCompass = q<HTMLElement>(".ro-compass");
   const roIcon = q<HTMLElement>(".ro-icon");
+  const readout = q<HTMLElement>(".readout");
   // Markup only changes when the value does: re-creating the <img> for an
   // unchanged symbol makes it blink mid-drag (same as the phone card).
   let shownDir: number | null | undefined;
   let shownSymbol: string | undefined;
   const update = (): void => {
     const p = points[idx];
+    const outside = !p;
+    readout.classList.toggle("is-outside", outside);
+    for (const el of [cursor, dotTemp, dotWind]) {
+      if (outside) el.setAttribute("visibility", "hidden");
+      else el.removeAttribute("visibility");
+    }
+    for (const el of [grab, railCursor]) {
+      if (el) el.style.visibility = outside ? "hidden" : "";
+    }
+    if (outside) {
+      roTime.textContent = opts.t.noForecastForTime;
+      slider.removeAttribute("aria-valuenow");
+      slider.setAttribute("aria-valuetext", opts.t.noForecastForTime);
+      return;
+    }
     const x = geo.cx(idx);
     cursor.setAttribute("x1", `${x}`);
     cursor.setAttribute("x2", `${x}`);
@@ -1174,6 +1214,21 @@ export function renderMapPanelGraph(
     readoutPop.addEventListener("pointercancel", endDrag);
   }
 
+  const commit = (): void => {
+    committedIdx = idx;
+    opts.onScrub(idx, true);
+  };
+  if (opts.previewHover) {
+    const preview = opts.previewHover;
+    plot.addEventListener("pointerleave", (e) => {
+      if (!preview() || e.pointerType !== "mouse" || e.buttons) return;
+      if (idx === committedIdx) return;
+      idx = committedIdx;
+      update();
+      opts.onScrub(idx, false);
+    });
+  }
+
   // Non-fit (desktop): scrub by pointing anywhere on the plot — there's no
   // horizontal scroll to conflict with. Fit (landscape): the plot is wider than
   // the sheet and scrolls horizontally, so scrubbing on the plot would hijack
@@ -1190,6 +1245,7 @@ export function renderMapPanelGraph(
       opts.onScrub,
       update,
       scaleFn,
+      commit,
     );
   } else {
     // buildPlotSvg hard-codes `touch-action:none` on the <svg> (it was the
@@ -1204,10 +1260,12 @@ export function renderMapPanelGraph(
       const rect = plot.getBoundingClientRect();
       const scale = scaleFn() || 1;
       const i = geo.indexAt((e.clientX - rect.left) / scale);
-      if (i === idx) return;
-      idx = i;
-      update();
-      opts.onScrub(i);
+      if (i !== idx) {
+        idx = i;
+        update();
+        opts.onScrub(i, false);
+      }
+      commit();
     });
   }
   if (rail) {
@@ -1223,6 +1281,7 @@ export function renderMapPanelGraph(
       opts.onScrub,
       update,
       scaleFn,
+      commit,
     );
   }
   slider.addEventListener("keydown", (e) => {
@@ -1237,7 +1296,8 @@ export function renderMapPanelGraph(
     idx = next;
     update();
     scrollToScrub(scroll, geo, idx, L.colW, scaleFn);
-    opts.onScrub(idx);
+    opts.onScrub(idx, false);
+    commit();
   });
   applyFit();
   wireStickyDayLabels(scroll, scaleFn);
@@ -1262,10 +1322,12 @@ export function renderMapPanelGraph(
   }
 
   return {
+    // Moves the cursor without reporting back (-1 = outside the forecast).
     setScrubIdx: (i: number) => {
-      idx = Math.max(0, Math.min(points.length - 1, i));
+      idx = i < 0 ? -1 : Math.min(points.length - 1, i);
+      committedIdx = idx;
       update();
-      scrollToScrub(scroll, geo, idx, L.colW, scaleFn);
+      if (idx >= 0) scrollToScrub(scroll, geo, idx, L.colW, scaleFn);
     },
   };
 }
