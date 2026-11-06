@@ -1099,6 +1099,8 @@ export function renderMapPanelGraph(
   const roCompass = q<HTMLElement>(".ro-compass");
   const roIcon = q<HTMLElement>(".ro-icon");
   const readout = q<HTMLElement>(".readout");
+  // Absent when now is outside the run or has no temperature.
+  const nowDot = host.querySelector<SVGCircleElement>(".chart-plot .chart-now-dot");
   // Markup only changes when the value does: re-creating the <img> for an
   // unchanged symbol makes it blink mid-drag (same as the phone card).
   let shownDir: number | null | undefined;
@@ -1111,6 +1113,11 @@ export function renderMapPanelGraph(
       if (outside) el.setAttribute("visibility", "hidden");
       else el.removeAttribute("visibility");
     }
+    // The "now" marker's dot looks exactly like the cursor's temperature dot,
+    // so with no cursor it would pass for the selection: hide it (same as the
+    // phone card). Its line stays.
+    if (outside) nowDot?.setAttribute("visibility", "hidden");
+    else nowDot?.removeAttribute("visibility");
     for (const el of [grab, railCursor]) {
       if (el) el.style.visibility = outside ? "hidden" : "";
     }

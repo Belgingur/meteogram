@@ -73,9 +73,22 @@ async function cursorParts(
   );
 }
 
+/** The "now" marker's temperature dot computes as `visibility`. */
+async function expectNowDot(
+  widget: Locator,
+  visibility: "visible" | "hidden",
+): Promise<void> {
+  const dot = widget.locator(".chart-now-dot");
+  await expect(dot).toHaveCount(1);
+  await expect
+    .poll(() => dot.evaluate((el) => getComputedStyle(el).visibility))
+    .toBe(visibility);
+}
+
 /** No part of the cursor is on screen, and there are parts to check. The orange
  *  "now" marker is not the cursor: it marks the current hour whatever is
- *  selected, so it stays. */
+ *  selected, so its line stays. Its dot is drawn exactly like the cursor's
+ *  temperature dot, so with no cursor it goes too. */
 async function expectNoCursor(widget: Locator, minParts = 3): Promise<void> {
   await expect.poll(async () => (await cursorParts(widget)).length).toBeGreaterThanOrEqual(minParts);
   await expect
@@ -85,6 +98,7 @@ async function expectNoCursor(widget: Locator, minParts = 3): Promise<void> {
   const now = widget.locator(".graph-host .chart-now");
   await expect(now).toHaveCount(1);
   expect(await now.evaluate((el) => getComputedStyle(el).visibility)).toBe("visible");
+  await expectNowDot(widget, "hidden");
 }
 
 /** x of an SVG line inside the component, in its own user units */
@@ -855,6 +869,7 @@ test.describe("selected-time", () => {
     await expect
       .poll(async () => (await cursorParts(panel)).every((p) => p.shown))
       .toBe(true);
+    await expectNowDot(panel, "visible");
   });
 
   test("no cursor when the chart is first drawn outside, or repainted while outside", async ({
@@ -875,6 +890,7 @@ test.describe("selected-time", () => {
     await expect
       .poll(async () => (await cursorParts(panel)).every((p) => p.shown))
       .toBe(true);
+    await expectNowDot(panel, "visible");
 
     // …then past the run's end…
     await setSelectedTime(page, "desktop-panel", "2026-07-20T00:00:00.000Z");
@@ -1069,11 +1085,13 @@ test.describe("selected-time in graph mode", () => {
     // The host's time goes outside the forecast (before the run)…
     await setSelectedTime(page, "graph-card", "2026-07-08T00:00:00.000Z");
     await expectEvent("", null, "host");
+    await expectNowDot(graph, "hidden");
 
     // …and is removed: back to the current hour.
     await setSelectedTime(page, "graph-card", null);
     await expect(slider).toHaveAttribute("aria-valuenow", "3");
     await expectEvent("12:00", "2026-07-08T12:00:00.000Z", "host");
+    await expectNowDot(graph, "visible");
   });
 });
 
@@ -1129,6 +1147,8 @@ test.describe("selected-time on the phone @mobile", () => {
     await expectNoCursor(mobile, 4);
 
     await setSelectedTime(page, "mobile-full", "2026-07-10T09:00:00.000Z");
+    await expect(readout).not.toHaveClass(/is-outside/);
+    await expectNowDot(mobile, "visible");
     await mobile.locator(".tab[data-view='table']").click();
     await expect(mobile.locator(".day-chip.sel")).toHaveAttribute("data-day", "2");
     expect(await statusEvents(page)).toEqual([]);
@@ -1170,6 +1190,7 @@ test.describe("selected-time outside the run, first drawn @mobile", () => {
           .map((p) => p.shown),
       )
       .toEqual([true, true]);
+    await expectNowDot(panel, "visible");
   });
 });
 

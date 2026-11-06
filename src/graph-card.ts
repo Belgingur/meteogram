@@ -391,6 +391,8 @@ export function renderGraphCard(
   let shownDir: number | null | undefined;
   let shownSymbol: string | undefined;
   const readout = q<HTMLElement>(".readout");
+  // Absent when now is outside the run or has no temperature.
+  const nowDot = host.querySelector<SVGCircleElement>(".chart-now-dot");
 
   const update = (): void => {
     const p = points[idx];
@@ -400,6 +402,11 @@ export function renderGraphCard(
       if (outside) el.setAttribute("visibility", "hidden");
       else el.removeAttribute("visibility");
     }
+    // With no cursor, the "now" marker is the only line on the chart, and its
+    // dot is drawn exactly like the cursor's temperature dot: hide the dot so
+    // the marker can't pass for the selection. Its line stays.
+    if (outside) nowDot?.setAttribute("visibility", "hidden");
+    else nowDot?.removeAttribute("visibility");
     if (outside) {
       roTime.textContent = t.noForecastForTime;
       scroller.removeAttribute("aria-valuenow");
