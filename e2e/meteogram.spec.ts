@@ -29,8 +29,9 @@ async function openFixture(
   /** Serve the fixture with `selected-time` already on this widget, so the
    *  chart is first drawn with it rather than moved to it afterwards. */
   selectedTime?: { id: string; iso: string },
+  time: Date = FIXED_TIME,
 ): Promise<void> {
-  await page.clock.install({ time: FIXED_TIME });
+  await page.clock.install({ time });
   await page.addInitScript(() => localStorage.clear());
   await blockWebfonts(page);
   if (selectedTime) {
@@ -992,6 +993,57 @@ test.describe("without selected-time", () => {
     await page.mouse.move(2, 2);
     await expect(readout.locator(".ro-time")).toHaveText(hovered ?? "");
     expect(await timeEvents(page)).toHaveLength(1);
+  });
+});
+
+// From 23:30 the nearest column is tomorrow's 00:00. Today is still the day
+// that contains now: the chips used to move a day ahead for that half hour,
+// dropping today's last hours and calling tomorrow "Today".
+const BEFORE_MIDNIGHT = new Date("2026-07-08T23:40:00Z"); // Wednesday
+
+/** The first three chips' names ("Today", "Tomorrow", "Fri"). */
+async function chipNames(widget: Locator): Promise<string[]> {
+  return (await widget.locator(".day-chip .dc-name").allTextContents()).slice(0, 3);
+}
+
+test.describe("the day at 23:40", () => {
+  test("today stays Wednesday and follows the host's hour on either side of midnight", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await openFixture(page, undefined, BEFORE_MIDNIGHT);
+
+    const panel = page.locator("#desktop-panel");
+    const readout = panel.locator(".graph-host .readout");
+    await expect(panel.locator(".day-chip.sel")).toHaveAttribute("data-day", "0");
+    expect(await chipNames(panel)).toEqual(["Today", "Tomorrow", "Fri"]);
+
+    // The host's hour is today's last: the day shown is today.
+    await setSelectedTime(page, "desktop-panel", "2026-07-08T23:00:00.000Z");
+    await expect(readout.locator(".ro-time")).toHaveText(/Wed 8 July · 23:00/);
+    await expect(panel.locator(".day-chip.sel")).toHaveAttribute("data-day", "0");
+    expect(await chipNames(panel)).toEqual(["Today", "Tomorrow", "Fri"]);
+
+    // Tomorrow afternoon is under "Tomorrow", not "Today".
+    await setSelectedTime(page, "desktop-panel", "2026-07-09T15:00:00.000Z");
+    await expect(readout.locator(".ro-time")).toHaveText(/Thu 9 July · 15:00/);
+    await expect(panel.locator(".day-chip.sel")).toHaveAttribute("data-day", "1");
+  });
+});
+
+test.describe("the day at 23:40 on the phone @mobile", () => {
+  test("today's chip and table are Wednesday's, with the 23:00 row marked", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openFixture(page, undefined, BEFORE_MIDNIGHT);
+
+    const mobile = page.locator("#mobile-full");
+    await expect(mobile.locator(".day-chip.sel")).toHaveAttribute("data-day", "0");
+    expect(await chipNames(mobile)).toEqual(["Today", "Tomorrow", "Fri"]);
+    await expect(mobile.locator(".day-chip.sel .dc-date")).toHaveText("8 Jul");
+    await expect(mobile.locator(".hrow-now")).toHaveCount(1);
+    await expect(mobile.locator(".hrow-now .h-time")).toHaveText("23");
   });
 });
 

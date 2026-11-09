@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { nowIndex } from "../src/graph-card";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { currentIndex, nowIndex } from "../src/graph-card";
 import { groupDays, panelTableHtml } from "../src/landing";
 import { labels } from "../src/i18n";
 import { sampleHourPoints } from "../src/sample";
@@ -37,20 +37,45 @@ describe("sampleHourPoints — stands in for an aged model run", () => {
   });
 });
 
-describe("hourly table marks the hour containing now", () => {
+// The clock is pinned: these used to read the real one and failed only when
+// run between 23:30 and midnight UTC, the half hour in which the nearest column
+// is already tomorrow's. The sample series is UTC, so these are its local times.
+describe.each([
+  "2026-07-08T12:00:00Z",
+  "2026-07-08T23:20:00Z",
+  "2026-07-08T23:40:00Z",
+  "2026-07-08T23:59:00Z",
+])("hourly table marks the hour containing now, at %s", (nowIso) => {
   const t = labels("en");
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(nowIso));
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
 
   it("flags exactly one row in today's group", () => {
     const points = sampleHourPoints(48);
-    const days = groupDays(points, t, nowIndex(points));
+    const days = groupDays(points, t, currentIndex(points));
     const html = panelTableHtml(days[0], t);
     expect(html.match(/hrow-now/g)).toHaveLength(1);
   });
 
   it("flags no row on a later day", () => {
     const points = sampleHourPoints(48);
-    const days = groupDays(points, t, nowIndex(points));
+    const days = groupDays(points, t, currentIndex(points));
     expect(panelTableHtml(days[1], t)).not.toContain("hrow-now");
+  });
+
+  it("labels today's date 'Today' and tomorrow's 'Tomorrow'", () => {
+    const points = sampleHourPoints(48);
+    const days = groupDays(points, t, currentIndex(points));
+    expect(days[0].name).toBe(t.today);
+    expect(days[0].hours[0].local.getUTCDate()).toBe(new Date(nowIso).getUTCDate());
+    expect(days[1].name).toBe(t.tomorrow);
+    expect(days[1].hours[0].local.getUTCDate()).toBe(new Date(nowIso).getUTCDate() + 1);
   });
 
   it("marks the row whose clock hour is the current one", () => {
@@ -58,7 +83,7 @@ describe("hourly table marks the hour containing now", () => {
     // the analysis hour (or at midnight when the run started the previous day),
     // so the marked row's offset varies — its hour label must not.
     const points = sampleHourPoints(48);
-    const days = groupDays(points, t, nowIndex(points));
+    const days = groupDays(points, t, currentIndex(points));
     const rows = days[0].hours;
     // One snapshot of the clock for the whole assertion: sampling it per row and
     // again for the expectation can straddle an hour boundary and fail on a
