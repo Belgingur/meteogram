@@ -13,6 +13,7 @@ import {
 import { distanceKm } from "./geo";
 import {
   columnAtTime,
+  currentIndex,
   forecastSpanLabel,
   indexAtInstant,
   nowIndex,
@@ -1187,7 +1188,7 @@ export class BelMeteogram extends HTMLElement {
   private followSelectedDay(points: HourPoint[], col: number): boolean {
     const p = points[col];
     if (!this.isFull || !p) return false;
-    const days = groupDays(this.points, this.t, nowIndex(this.points));
+    const days = groupDays(this.points, this.t, currentIndex(this.points));
     const day = days.findIndex((d) => d.hours.includes(p));
     if (day < 0 || day === this.selectedDay) return false;
     this.selectedDay = day;
@@ -1300,7 +1301,7 @@ export class BelMeteogram extends HTMLElement {
       body = `<div class="graph-wrap" style="padding-top:12px"><div class="card"><div class="error"><div class="error-msg">${esc(t.error)}</div><button class="retry">${esc(t.retry)}</button></div></div></div>`;
     } else {
       const nowI = nowIndex(this.points);
-      const days = groupDays(this.points, t, nowI);
+      const days = groupDays(this.points, t, currentIndex(this.points));
       const si = Math.max(0, Math.min(days.length - 1, this.selectedDay));
       body = landscape
         ? this.landscapeBodyHtml(days, si, this.points[nowI], t)

@@ -134,6 +134,21 @@ const CHIP_CLEARANCE_GAP = 10;
 /** Left inset the chips are pinned at (`.lane-chip-wrap { left: 4px }`). */
 const CHIP_LEFT_INSET = 4;
 
+/**
+ * Index of the column whose step contains "now": the last one that starts at
+ * or before it, so 23:00 until midnight rather than {@link nowIndex}'s 00:00
+ * from 23:30. This is the column whose day is today. 0 when the series is in
+ * the future; the last column once it has run out.
+ */
+export function currentIndex(
+  points: HourPoint[],
+  now: number = Date.now(),
+): number {
+  let at = 0;
+  for (let i = 0; i < points.length && points[i].utcMs <= now; i++) at = i;
+  return at;
+}
+
 /** Index of the hour closest to "now"; 0 when the series is in the future */
 export function nowIndex(
   points: HourPoint[],

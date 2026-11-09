@@ -65,17 +65,22 @@ export function coordLabel(lat: number, lon: number, t: Labels): string {
   return `${Math.abs(lat).toFixed(2)}°${ns} ${Math.abs(lon).toFixed(2)}°${ew}`;
 }
 
-/** Group hourly points into local calendar days, starting at "now"'s day */
+/**
+ * Group hourly points into local calendar days, starting at today: the day of
+ * column `todayIdx`. Pass `currentIndex()`, the column that contains now, not
+ * `nowIndex()`: from 23:30 the nearest column is tomorrow's 00:00, which would
+ * drop today's last hours and label tomorrow "Today".
+ */
 export function groupDays(
   points: HourPoint[],
   t: Labels,
-  nowIdx: number,
+  todayIdx: number,
   maxDays = 7,
 ): DayGroup[] {
   if (!points.length) return [];
   const dayKey = (p: HourPoint): number =>
     Date.UTC(p.local.getUTCFullYear(), p.local.getUTCMonth(), p.local.getUTCDate());
-  const todayKey = dayKey(points[Math.max(0, Math.min(points.length - 1, nowIdx))]);
+  const todayKey = dayKey(points[Math.max(0, Math.min(points.length - 1, todayIdx))]);
 
   const byDay = new Map<number, HourPoint[]>();
   for (const p of points) {
