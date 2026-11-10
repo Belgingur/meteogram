@@ -1047,6 +1047,101 @@ test.describe("table scroll in the landscape sheet @mobile", () => {
   });
 });
 
+test.describe("a forecast request that never answers", () => {
+  /** Serve a config and metadata, and hold every point request open. */
+  async function serveHangingForecast(page: Page): Promise<{ pointRequests: () => number }> {
+    let points = 0;
+    const json = (body: unknown) => ({
+      status: 200,
+      contentType: "application/json",
+      headers: { "access-control-allow-origin": "*" },
+      body: JSON.stringify(body),
+    });
+    await page.route("https://wod.test/**", async (route) => {
+      const url = route.request().url();
+      if (url.endsWith("/config")) {
+        await route.fulfill(json({ forecasts: [{ id: "upstream/a", name: "A", url: "https://wod.test/forecast/a" }] }));
+      } else if (url.endsWith("/forecast/a")) {
+        await route.fulfill(json({ forecast_id: "upstream/a", station_data_url: "https://wod.test/data/[station]/meteogram.xml", stations: [] }));
+      } else {
+        points++; // never answered
+      }
+    });
+    return { pointRequests: () => points };
+  }
+
+  async function addLiveWidget(page: Page): Promise<Locator> {
+    await page.evaluate(() => {
+      const host = document.createElement("section");
+      host.className = "case panel-case";
+      host.innerHTML = `<bel-meteogram id="live" mode="full" language="en" api-url="https://wod.test/config" location-lat="64.1" location-lon="-21.9"></bel-meteogram>`;
+      document.querySelector("main")!.appendChild(host);
+    });
+    return page.locator("#live");
+  }
+
+  /** Animations running inside the widget's shadow tree. (Chromium's
+   *  document.getAnimations() leaves out shadow trees; the root's own doesn't.) */
+  const runningIn = (widget: Locator) =>
+    widget.evaluate(
+      (el) => el.shadowRoot!.getAnimations().filter((a) => a.playState === "running").length,
+    );
+
+  test("ends in the error state with Retry after the timeout, with nothing animating, and Retry asks again", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await openFixture(page);
+    const { pointRequests } = await serveHangingForecast(page);
+    const widget = await addLiveWidget(page);
+    await recordEvents(page, "live");
+
+    await expect(widget.locator(".sk").first()).toBeVisible();
+    await expect.poll(() => pointRequests()).toBe(1);
+    expect(await runningIn(widget)).toBeGreaterThan(0);
+
+    await page.clock.fastForward(19_000);
+    await expect(widget.locator(".sk").first()).toBeVisible();
+    await page.clock.fastForward(1_000);
+
+    await expect(widget.locator(".error .retry")).toBeVisible();
+    expect(await widget.locator(".sk").count()).toBe(0);
+    expect(await runningIn(widget)).toBe(0);
+    await expect
+      .poll(() => statusEvents(page))
+      .toContainEqual({ status: "error", error: "meteogram: timed out after 20 s" });
+
+    await widget.locator(".error .retry").click();
+    await expect.poll(() => pointRequests()).toBe(2);
+    await expect(widget.locator(".sk").first()).toBeVisible();
+
+    // The failed load is logged, as every failed load is; that one is expected.
+    expect(pageErrors).toEqual([expect.stringContaining("meteogram: timed out after 20 s")]);
+    pageErrors = [];
+  });
+
+  test("removing the element cancels the request in flight, and nothing is left animating", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await openFixture(page);
+    const { pointRequests } = await serveHangingForecast(page);
+    const failed: string[] = [];
+    page.on("requestfailed", (r) => failed.push(r.url()));
+    const widget = await addLiveWidget(page);
+    await expect.poll(() => pointRequests()).toBe(1);
+
+    const animations = await widget.evaluate((el) => {
+      const before = el.shadowRoot!.getAnimations().length;
+      el.parentElement!.remove();
+      return { before, after: el.shadowRoot!.getAnimations().length };
+    });
+    expect(animations.before).toBeGreaterThan(0);
+    expect(animations.after).toBe(0);
+    await expect.poll(() => failed.filter((u) => u.includes("meteogram.json"))).toHaveLength(1);
+  });
+});
+
 test.describe("without selected-time", () => {
   test("scrubbing works as it always has, and reports committed moves", async ({
     page,

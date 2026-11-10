@@ -40,25 +40,88 @@ export function configUrl(opts: ApiOptions): string {
  */
 export const CONFIG_TTL_MS = 60 * 60 * 1000;
 
+/**
+ * How long one request may take, from sending it to the end of its body,
+ * before it is given up and the widget shows its error state with Retry. Long
+ * enough for a slow mobile connection to fetch a two-week point forecast; short
+ * enough that a request that will never answer doesn't leave the loading
+ * skeleton running indefinitely.
+ */
+export const REQUEST_TIMEOUT_MS = 20_000;
+
+/**
+ * GET `url` and parse it as JSON, through an AbortController that gives up
+ * after {@link REQUEST_TIMEOUT_MS}, or as soon as `signal` aborts. The timer
+ * covers reading the body too, so a response that stalls half-way also ends.
+ * Errors are labelled with `what` ("meteogram: timed out after 20 s").
+ */
+async function fetchJson<T>(
+  url: string,
+  what: string,
+  init: RequestInit = {},
+  signal?: AbortSignal,
+): Promise<{ json: T; response: Response }> {
+  const controller = new AbortController();
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, REQUEST_TIMEOUT_MS);
+  const onAbort = (): void => controller.abort(signal?.reason);
+  if (signal?.aborted) onAbort();
+  else signal?.addEventListener("abort", onAbort, { once: true });
+  try {
+    const response = await fetch(url, { ...init, signal: controller.signal });
+    if (!response.ok) throw new Error(`${what}: HTTP ${response.status}`);
+    return { json: (await response.json()) as T, response };
+  } catch (err) {
+    if (timedOut) {
+      throw new Error(`${what}: timed out after ${REQUEST_TIMEOUT_MS / 1000} s`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener("abort", onAbort);
+  }
+}
+
+/**
+ * Settle with `promise`, or reject as soon as `signal` aborts, without
+ * cancelling `promise` itself (other callers may still be waiting for it).
+ */
+function untilAborted<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return promise;
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = (): void => reject(abortError(signal));
+    if (signal.aborted) return onAbort();
+    signal.addEventListener("abort", onAbort, { once: true });
+    promise.then(resolve, reject).finally(() => signal.removeEventListener("abort", onAbort));
+  });
+}
+
+function abortError(signal: AbortSignal): unknown {
+  return signal.reason ?? new DOMException("The operation was aborted.", "AbortError");
+}
+
 const configCache = new Map<string, { at: number; json: Promise<unknown> }>();
 
 /**
  * GET `url` as JSON, sharing one request between every caller (all widgets on
- * the page) for {@link CONFIG_TTL_MS}. A failed request is forgotten, so a
- * retry asks again.
+ * the page) for {@link CONFIG_TTL_MS}. A failed or timed-out request is
+ * forgotten, so a retry asks again. `signal` lets one caller stop waiting; it
+ * doesn't cancel the shared request, which has its own timeout.
  */
-function cachedJson<T>(url: string, what: string): Promise<T> {
+function cachedJson<T>(url: string, what: string, signal?: AbortSignal): Promise<T> {
   const hit = configCache.get(url);
-  if (hit && Date.now() - hit.at < CONFIG_TTL_MS) return hit.json as Promise<T>;
-  const json = fetch(url).then(async (response) => {
-    if (!response.ok) throw new Error(`${what}: HTTP ${response.status}`);
-    return (await response.json()) as T;
-  });
+  if (hit && Date.now() - hit.at < CONFIG_TTL_MS) {
+    return untilAborted(hit.json as Promise<T>, signal);
+  }
+  const json = fetchJson<T>(url, what).then((r) => r.json);
   configCache.set(url, { at: Date.now(), json });
   json.catch(() => {
     if (configCache.get(url)?.json === json) configCache.delete(url);
   });
-  return json;
+  return untilAborted(json, signal);
 }
 
 /** Forget every cached config and forecast metadata response. */
@@ -66,8 +129,11 @@ export function clearConfigCache(): void {
   configCache.clear();
 }
 
-export async function loadConfig(opts: ApiOptions): Promise<ForecastUrl[]> {
-  const data = await cachedJson<MeteoConfigResponse>(configUrl(opts), "config");
+export async function loadConfig(
+  opts: ApiOptions,
+  signal?: AbortSignal,
+): Promise<ForecastUrl[]> {
+  const data = await cachedJson<MeteoConfigResponse>(configUrl(opts), "config", signal);
   return data.forecasts;
 }
 
@@ -89,8 +155,11 @@ export function findForecast(
   return forecasts.find((f) => f.id === path);
 }
 
-export function loadForecastMetadata(url: string): Promise<ForecastMetadata> {
-  return cachedJson<ForecastMetadata>(url, "forecast");
+export function loadForecastMetadata(
+  url: string,
+  signal?: AbortSignal,
+): Promise<ForecastMetadata> {
+  return cachedJson<ForecastMetadata>(url, "forecast", signal);
 }
 
 /**
@@ -172,19 +241,29 @@ export interface MeteogramFetchResult {
   lastModified: Date | null;
 }
 
+/**
+ * Fetch one point's forecast. Gives up after {@link REQUEST_TIMEOUT_MS}, and
+ * cancels the request as soon as `signal` aborts (a newer load, or the widget
+ * leaving the page).
+ */
 export async function loadMeteogramData(
   url: string,
   opts: ApiOptions,
+  signal?: AbortSignal,
 ): Promise<MeteogramFetchResult> {
   const headers = new Headers();
   if (opts.user && opts.password) {
     headers.set("Authorization", "Basic " + btoa(`${opts.user}:${opts.password}`));
   }
-  const response = await fetch(url, { headers });
-  if (!response.ok) throw new Error(`meteogram: HTTP ${response.status}`);
+  const { json, response } = await fetchJson<MeteogramData>(
+    url,
+    "meteogram",
+    { headers },
+    signal,
+  );
   const lastMod = response.headers.get("Last-Modified");
   return {
-    data: await response.json(),
+    data: json,
     lastModified: lastMod ? new Date(lastMod) : null,
   };
 }
