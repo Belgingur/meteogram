@@ -166,6 +166,10 @@ function focusSelector(el: Element | null): string | null {
 }
 
 /** Whether a key event started in something that takes text input. */
+/** The element that scrolls the hourly table, whichever layout is showing
+ *  (see paint()). */
+const TABLE_SCROLLER = ".ls-scroll, .panel-table";
+
 function isEditableTarget(target: EventTarget | undefined): boolean {
   if (!(target instanceof HTMLElement)) return false;
   if (target.isContentEditable) return true;
@@ -944,15 +948,15 @@ export class BelMeteogram extends HTMLElement {
   }
 
   private paint(): void {
-    // Preserve the table column's scroll position across the re-render. Picking
-    // a different day rebuilds innerHTML, which would otherwise snap the scroll
-    // back to the top (the now-card) — the user wants to stay where they were.
-    // `.ls-scroll` is the landscape table column; `.exp-left` the desktop
-    // expanded column. Only present in table layouts, so a graph paint is a
+    // Preserve the table's scroll position across the re-render. Picking a
+    // different day (or a host's selected-time on another day) rebuilds
+    // innerHTML, which would otherwise snap the scroll back to the top, the
+    // night hours. `.ls-scroll` scrolls the landscape sheet's table column
+    // (the .panel-table inside it doesn't scroll, and comes later in the
+    // tree); `.panel-table` scrolls itself in the docked panel and the
+    // expanded layout. Only present in table layouts, so a graph paint is a
     // no-op here.
-    const prevScroller = this.body.querySelector<HTMLElement>(
-      ".ls-scroll, .exp-left",
-    );
+    const prevScroller = this.body.querySelector<HTMLElement>(TABLE_SCROLLER);
     const prevTop = prevScroller?.scrollTop ?? 0;
     // Also hold the graph's horizontal scroll: in the expanded two-column view
     // the graph shows all 48 h and doesn't change when you pick a different day
@@ -988,9 +992,7 @@ export class BelMeteogram extends HTMLElement {
       this.body.querySelector<HTMLElement>(focusSel)?.focus({ preventScroll: true });
     }
     if (prevTop > 0) {
-      const nextScroller = this.body.querySelector<HTMLElement>(
-        ".ls-scroll, .exp-left",
-      );
+      const nextScroller = this.body.querySelector<HTMLElement>(TABLE_SCROLLER);
       if (nextScroller) nextScroller.scrollTop = prevTop;
     }
     if (prevLeft > 0) {

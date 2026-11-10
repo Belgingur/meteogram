@@ -967,6 +967,86 @@ test.describe("selected-time", () => {
   });
 });
 
+test.describe("table scroll across a repaint", () => {
+  /** Scroll `table` down and return where it ended up (clamped to its content). */
+  async function scrollDown(table: Locator): Promise<number> {
+    const top = await table.evaluate((el) => {
+      el.scrollTop = 320;
+      return el.scrollTop;
+    });
+    expect(top).toBeGreaterThan(100);
+    return top;
+  }
+  const scrollTop = (table: Locator) => table.evaluate((el) => el.scrollTop);
+
+  test("the docked table stays put for a host time on another day, a day chip and a language change", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await openFixture(page);
+    const panel = page.locator("#desktop-panel");
+    await panel.locator(".tab[data-view='table']").click();
+    const table = panel.locator(".panel-table");
+    await expect(table).toBeVisible();
+    const top = await scrollDown(table);
+
+    await setSelectedTime(page, "desktop-panel", "2026-07-09T15:00:00.000Z");
+    await expect(panel.locator(".day-chip.sel")).toHaveAttribute("data-day", "1");
+    expect(await scrollTop(table)).toBe(top);
+
+    await panel.locator(".day-chip[data-day='2']").click();
+    await expect(panel.locator(".day-chip.sel")).toHaveAttribute("data-day", "2");
+    expect(await scrollTop(table)).toBe(top);
+
+    await page.evaluate(() => document.getElementById("desktop-panel")!.setAttribute("language", "is"));
+    await expect(panel.locator(".tab[data-view='table']")).not.toHaveText("Table");
+    expect(await scrollTop(table)).toBe(top);
+  });
+
+  test("the expanded layout's table stays put for a host time on another day", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await openFixture(page);
+    const panel = page.locator("#desktop-panel");
+    await panel.locator(".chart-fs-btn").click();
+    await expect(panel.locator(".page.is-expanded")).toBeVisible();
+    const table = panel.locator(".exp-left .panel-table");
+    await expect(table).toBeVisible();
+    const top = await scrollDown(table);
+
+    await setSelectedTime(page, "desktop-panel", "2026-07-09T15:00:00.000Z");
+    await expect(panel.locator(".day-chip.sel")).toHaveAttribute("data-day", "1");
+    expect(await scrollTop(table)).toBe(top);
+  });
+});
+
+test.describe("table scroll in the landscape sheet @mobile", () => {
+  test("the table column stays put for a host time on another day, as before", async ({
+    page,
+    isMobile,
+  }) => {
+    test.skip(!isMobile, "landscape layout needs a touch device");
+    await page.setViewportSize({ width: 844, height: 390 });
+    await openFixture(page);
+    const panel = page.locator("#desktop-panel");
+    await expect(panel.locator(".page.is-fullscreen")).toBeVisible();
+    await panel.locator(".tab[data-view='table']").click();
+    const column = panel.locator(".ls-scroll");
+    await expect(column).toBeVisible();
+    const top = await column.evaluate((el) => {
+      el.scrollTop = 200;
+      return el.scrollTop;
+    });
+    // A short sheet scrolls only a little; any scroll will do.
+    expect(top).toBeGreaterThan(0);
+
+    await setSelectedTime(page, "desktop-panel", "2026-07-09T15:00:00.000Z");
+    await expect(panel.locator(".day-chip.sel")).toHaveAttribute("data-day", "1");
+    expect(await column.evaluate((el) => el.scrollTop)).toBe(top);
+  });
+});
+
 test.describe("without selected-time", () => {
   test("scrubbing works as it always has, and reports committed moves", async ({
     page,
