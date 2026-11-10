@@ -159,6 +159,22 @@ export function chartLayoutAtHeight(
 /** Shortest chart worth resolving bands for; below this the lanes are noise. */
 const MIN_EXPANDED_CHART_H = 240;
 
+/**
+ * The height the expanded chart can be drawn at: its column's height less the
+ * thickness of the chart's own horizontal scrollbar, which sits under the chart
+ * in the same column. Measured from the painted scroller rather than assumed:
+ * an overlay scrollbar takes no room, and a classic one is as thick as the
+ * platform and our scrollbar styles make it (the 8px ::-webkit-scrollbar rule,
+ * or whatever `scrollbar-width: thin` gives where the standard properties win).
+ */
+export function expandedChartHeight(
+  columnHeight: number,
+  scroller: Pick<HTMLElement, "offsetHeight" | "clientHeight"> | null,
+): number {
+  const bar = scroller ? Math.max(0, scroller.offsetHeight - scroller.clientHeight) : 0;
+  return columnHeight - bar;
+}
+
 export const CHART_COMPACT: ChartLayout = {
   colW: 26,
   axisW: 46,
@@ -1036,8 +1052,13 @@ export function renderMapPanelGraph(
     // panels gain lane height for the same reason. Measured after the first paint
     // because the box only has a height once it is in the document; a resize
     // repaints (see the panel's resize grip), so this re-measures then.
+    // The chart's horizontal scrollbar shares the column, so it comes off too;
+    // otherwise the column overflows by its thickness and the bar ends up below
+    // the visible bottom.
     const box = host.querySelector<HTMLElement>(".chart-fit");
-    const avail = box?.clientHeight ?? 0;
+    const avail = box
+      ? expandedChartHeight(box.clientHeight, host.querySelector<HTMLElement>(".chart-scroll"))
+      : 0;
     if (avail >= MIN_EXPANDED_CHART_H && Math.abs(avail - L.height) > 2) {
       L = paint(1, chartLayoutAtHeight(base, avail));
     }

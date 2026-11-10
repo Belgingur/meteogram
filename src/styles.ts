@@ -719,9 +719,10 @@ input:focus-visible,
 .exp-right .graph-view-2a,
 .exp-right .graph-host,
 .exp-right .graph-panel { flex: 1; min-height: 0; }
-/* The taller (fullscreen) chart fills the expanded column; scroll if the panel
-   is shorter than the chart rather than clipping it. */
-.exp-right .chart-fit { overflow-y: auto; }
+/* The expanded chart is drawn at the column's height less its own horizontal
+   scrollbar (expandedChartHeight), so the column never scrolls vertically: a
+   vertical scroll here is what pushed that scrollbar below the visible bottom. */
+.exp-right .chart-fit { overflow-y: hidden; }
 
 /* Table view — scrolling 24 h table with sticky header */
 .panel-table { flex: 1; min-height: 70px; overflow-y: auto; padding: 0 16px 12px; }

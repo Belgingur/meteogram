@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { CHART_EXPANDED, chartLayoutAtHeight } from "../src/map-panel-graph";
+import {
+  CHART_EXPANDED,
+  chartLayoutAtHeight,
+  expandedChartHeight,
+} from "../src/map-panel-graph";
 import { CHART_SPEC } from "../src/layout";
 
 /**
@@ -67,5 +71,25 @@ describe("chartLayoutAtHeight", () => {
       expect(windChip).toBeGreaterThanOrEqual(L.windTop);
       expect(windChip).toBeLessThan(L.windBase);
     }
+  });
+});
+
+/**
+ * The expanded chart shares its column with its own horizontal scrollbar, so
+ * the height it is drawn at leaves the scrollbar's thickness free, measured
+ * from the painted scroller (offsetHeight - clientHeight), never assumed.
+ */
+describe("expandedChartHeight", () => {
+  it("takes a classic scrollbar's measured thickness off the column", () => {
+    expect(expandedChartHeight(632, { offsetHeight: 640, clientHeight: 632 })).toBe(624);
+    expect(expandedChartHeight(632, { offsetHeight: 646, clientHeight: 632 })).toBe(618);
+  });
+
+  it("takes nothing off for an overlay scrollbar, which takes no room", () => {
+    expect(expandedChartHeight(632, { offsetHeight: 632, clientHeight: 632 })).toBe(632);
+  });
+
+  it("takes nothing off without a scroller", () => {
+    expect(expandedChartHeight(632, null)).toBe(632);
   });
 });
