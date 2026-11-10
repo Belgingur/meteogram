@@ -290,6 +290,8 @@ export class BelMeteogram extends HTMLElement {
   private status: "loading" | "ready" | "error" = "loading";
   private started = false;
   private loadToken = 0;
+  /** Cancels the load in flight: a newer load, or the element leaving the page. */
+  private loadAbort: AbortController | null = null;
   /** Guards setAttribute calls that must not retrigger load() */
   private suppressAttrCallback = false;
 
@@ -508,6 +510,9 @@ export class BelMeteogram extends HTMLElement {
   }
 
   disconnectedCallback(): void {
+    // A load still in flight is cancelled; connecting again starts a new one.
+    this.loadAbort?.abort();
+    this.loadAbort = null;
     this.mql.removeEventListener("change", this.onBreakpoint);
     this.mqlLandscape.removeEventListener("change", this.onLandscape);
     document.removeEventListener("keydown", this.onKeyDown);
@@ -749,6 +754,10 @@ export class BelMeteogram extends HTMLElement {
 
   private async load(): Promise<void> {
     const token = ++this.loadToken;
+    this.loadAbort?.abort();
+    const abort = new AbortController();
+    this.loadAbort = abort;
+    const { signal } = abort;
     // Drop the scrubbed COLUMN but keep the instant it stood for (scrubUtcMs).
     // A load can hand us a different series — another model, a coarser timestep,
     // a shorter window — where the same column number is a different hour. Let
@@ -810,7 +819,7 @@ export class BelMeteogram extends HTMLElement {
     };
 
     try {
-      const forecasts = await loadConfig(opts);
+      const forecasts = await loadConfig(opts, signal);
       const attrPath = forecastPath(
         this.getAttribute("forecast-type"),
         this.getAttribute("forecast-name"),
@@ -827,7 +836,7 @@ export class BelMeteogram extends HTMLElement {
       if (!forecast) throw new Error(`forecast not found: ${path}`);
       this.forecastId = forecast.id;
 
-      const meta = await loadForecastMetadata(forecast.url);
+      const meta = await loadForecastMetadata(forecast.url, signal);
       // Full mode takes the whole run: no `duration` on the request and no cap
       // on the transform, so the window is whatever the forecast actually has —
       // three days from a short-range model, a fortnight from a long one. Graph
@@ -845,11 +854,13 @@ export class BelMeteogram extends HTMLElement {
         ? await loadMeteogramData(
             stationDataUrl(meta, lat, lon, hours, station.extra?.ref),
             opts,
+            signal,
           ).catch((err: unknown) => {
+            if (signal.aborted) throw err;
             console.warn("bel-meteogram: station data failed, using the point", err);
-            return loadMeteogramData(stationDataUrl(meta, lat, lon, hours), opts);
+            return loadMeteogramData(stationDataUrl(meta, lat, lon, hours), opts, signal);
           })
-        : await loadMeteogramData(stationDataUrl(meta, lat, lon, hours), opts);
+        : await loadMeteogramData(stationDataUrl(meta, lat, lon, hours), opts, signal);
       if (token !== this.loadToken) return; // superseded by a newer load
       this.rawForecasts = forecasts;
       this.rawStations = meta.stations ?? [];
@@ -874,7 +885,10 @@ export class BelMeteogram extends HTMLElement {
         this.emitHostTime();
       }
     } catch (err) {
-      if (token !== this.loadToken) return;
+      // Superseded by a newer load, or cancelled because the element left the
+      // page: nothing to show. A request that timed out is not cancelled; it
+      // fails, and ends in the error state with Retry below.
+      if (token !== this.loadToken || signal.aborted) return;
       console.error("bel-meteogram: failed to load forecast", err);
       this.status = "error";
       this.paint();
