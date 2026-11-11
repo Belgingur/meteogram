@@ -956,6 +956,28 @@ export class BelMeteogram extends HTMLElement {
     });
   }
 
+  /**
+   * Draw the expanded graph again for its column's current height, when the
+   * chart asks (renderMapPanelGraph's onRedraw): the column changed height
+   * with nothing resized, e.g. once the panel's web font has loaded. On the
+   * next frame, sharing the refit frame, so a drag's refit and this one don't
+   * both run, and holding the horizontal scroll as a refit does.
+   */
+  private redrawGraphForColumn(): void {
+    if (this.refitRaf) return;
+    this.refitRaf = requestAnimationFrame(() => {
+      this.refitRaf = 0;
+      const prevLeft =
+        this.body.querySelector<HTMLElement>(".chart-scroll")?.scrollLeft ?? 0;
+      const { landscape, wide, expanded } = this.layoutFlags();
+      this.paintGraphHost(landscape, expanded, wide, this.t);
+      if (prevLeft > 0) {
+        const next = this.body.querySelector<HTMLElement>(".chart-scroll");
+        if (next) next.scrollLeft = prevLeft;
+      }
+    });
+  }
+
   /** Drop any pending refit frame — the caller is about to repaint anyway. */
   private cancelGraphRefit(): void {
     if (this.refitRaf) cancelAnimationFrame(this.refitRaf);
@@ -1429,6 +1451,7 @@ export class BelMeteogram extends HTMLElement {
             if (this.isExpanded()) this.collapsePanel();
             else this.expandPanel();
           },
+          onRedraw: () => this.redrawGraphForColumn(),
           // Landscape uses the two-column body but the COMPACT chart geometry
           // (~262px) as the fit base — its natural height is close to the short
           // landscape column, so scaling to fit stays legible (scaling the tall

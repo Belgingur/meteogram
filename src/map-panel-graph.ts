@@ -175,6 +175,26 @@ export function expandedChartHeight(
   return columnHeight - bar;
 }
 
+/**
+ * Whether an expanded chart drawn `paintedHeight` tall should be drawn again
+ * for its column as it is now, given the height the column would give it (less
+ * the scrollbar, see expandedChartHeight), when that is tall enough to draw:
+ * - shorter by any amount: the column doesn't scroll, so even a pixel of
+ *   overflow cuts into the chart's scrollbar;
+ * - taller by more than 2px: worth the lane height; 1–2px isn't worth a redraw.
+ * The same rule decides the repaint after the first paint, so a column that
+ * keeps its height never redraws.
+ */
+export function expandedChartNeedsRedraw(
+  columnHeight: number,
+  scroller: Pick<HTMLElement, "offsetHeight" | "clientHeight"> | null,
+  paintedHeight: number,
+): boolean {
+  const avail = expandedChartHeight(columnHeight, scroller);
+  if (avail < MIN_EXPANDED_CHART_H) return false;
+  return avail < paintedHeight || avail - paintedHeight > 2;
+}
+
 export const CHART_COMPACT: ChartLayout = {
   colW: 26,
   axisW: 46,
@@ -759,6 +779,9 @@ export interface MapPanelGraphOptions {
   /** Scale the (tall) chart to fill the available height instead of scrolling
    *  vertically — used by the full-screen landscape layout. */
   fit?: boolean;
+  /** Expanded only: the column changed height after the chart was drawn, so
+   *  the host should draw the graph again (see expandedChartNeedsRedraw). */
+  onRedraw?: () => void;
   metaLine?: string;
   placeName?: string;
   t: Labels;
@@ -1055,12 +1078,12 @@ export function renderMapPanelGraph(
     // The chart's horizontal scrollbar shares the column, so it comes off too;
     // otherwise the column overflows by its thickness and the bar ends up below
     // the visible bottom.
+    // The column can still change height after this, without any resize (see
+    // the observer below).
     const box = host.querySelector<HTMLElement>(".chart-fit");
-    const avail = box
-      ? expandedChartHeight(box.clientHeight, host.querySelector<HTMLElement>(".chart-scroll"))
-      : 0;
-    if (avail >= MIN_EXPANDED_CHART_H && Math.abs(avail - L.height) > 2) {
-      L = paint(1, chartLayoutAtHeight(base, avail));
+    const scroller = host.querySelector<HTMLElement>(".chart-scroll");
+    if (box && expandedChartNeedsRedraw(box.clientHeight, scroller, L.height)) {
+      L = paint(1, chartLayoutAtHeight(base, expandedChartHeight(box.clientHeight, scroller)));
     }
   }
 
@@ -1345,6 +1368,27 @@ export function renderMapPanelGraph(
       }
       applyFit();
       scrollToScrub(scroll, geo, idx, L.colW, scaleFn);
+    });
+    ro.observe(fitEl);
+  }
+
+  // Expanded: the column can change height after the chart was drawn for it
+  // with nothing being resized. On a page's first expand, the panel's web font
+  // can finish loading only now, and re-flow the text above the chart. Drawn
+  // for the old height, the chart would overflow the column, which doesn't
+  // scroll, and hide its own scrollbar. So ask the host to draw it again, as a
+  // resize would; the host's redraw makes a new chart and a new observer.
+  if (expanded && !opts.fit && fitEl && opts.onRedraw && typeof ResizeObserver !== "undefined") {
+    const redraw = opts.onRedraw;
+    const ro = new ResizeObserver(() => {
+      if (!fitEl.isConnected) {
+        ro.disconnect();
+        return;
+      }
+      if (expandedChartNeedsRedraw(fitEl.clientHeight, scroll, L.height)) {
+        ro.disconnect();
+        redraw();
+      }
     });
     ro.observe(fitEl);
   }

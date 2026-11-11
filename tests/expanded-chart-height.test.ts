@@ -4,6 +4,7 @@ import {
   CHART_EXPANDED,
   chartLayoutAtHeight,
   expandedChartHeight,
+  expandedChartNeedsRedraw,
 } from "../src/map-panel-graph";
 import { CHART_SPEC } from "../src/layout";
 
@@ -91,5 +92,49 @@ describe("expandedChartHeight", () => {
 
   it("takes nothing off without a scroller", () => {
     expect(expandedChartHeight(632, null)).toBe(632);
+  });
+});
+
+/**
+ * The expanded column can change height after the chart was drawn for it, with
+ * nothing resized (a web font that loads late re-flows the text above it). The
+ * chart is then drawn again, by the same rule as after its first paint (#32).
+ */
+describe("expandedChartNeedsRedraw", () => {
+  const bar = { offsetHeight: 629, clientHeight: 618 }; // an 11px classic scrollbar
+  const none = { offsetHeight: 618, clientHeight: 618 }; // an overlay scrollbar
+
+  it("leaves a chart drawn for the column's height alone", () => {
+    expect(expandedChartNeedsRedraw(618, bar, 607)).toBe(false);
+    expect(expandedChartNeedsRedraw(618, none, 618)).toBe(false);
+  });
+
+  it("redraws when the column shrank: the chart would overflow it", () => {
+    // Drawn at 607 for a 618px column; the font loads and the column is 606.
+    expect(expandedChartNeedsRedraw(606, bar, 607)).toBe(true);
+  });
+
+  it("redraws when the column grew", () => {
+    expect(expandedChartNeedsRedraw(640, bar, 607)).toBe(true);
+  });
+
+  it("redraws for any shrink, even 1px: the column doesn't scroll, so the overflow would cut into the scrollbar", () => {
+    expect(expandedChartNeedsRedraw(617, bar, 607)).toBe(true);
+    expect(expandedChartNeedsRedraw(616, bar, 607)).toBe(true);
+  });
+
+  it("ignores growth of 2px or less", () => {
+    expect(expandedChartNeedsRedraw(619, bar, 607)).toBe(false);
+    expect(expandedChartNeedsRedraw(620, bar, 607)).toBe(false);
+    expect(expandedChartNeedsRedraw(621, bar, 607)).toBe(true);
+  });
+
+  it("counts the scrollbar: the same column needs a shorter chart with a classic bar", () => {
+    expect(expandedChartNeedsRedraw(618, none, 607)).toBe(true);
+    expect(expandedChartNeedsRedraw(618, bar, 618)).toBe(true);
+  });
+
+  it("doesn't redraw for a column too short to draw a chart in", () => {
+    expect(expandedChartNeedsRedraw(200, bar, 607)).toBe(false);
   });
 });
