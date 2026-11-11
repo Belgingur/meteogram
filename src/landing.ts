@@ -65,6 +65,68 @@ export function coordLabel(lat: number, lon: number, t: Labels): string {
   return `${Math.abs(lat).toFixed(2)}°${ns} ${Math.abs(lon).toFixed(2)}°${ew}`;
 }
 
+/** Where the panel's title came from. Only "coordinates" is not a place's name. */
+export type PlaceNameSource = "attribute" | "picked" | "station" | "coordinates";
+
+export interface PlaceTitle {
+  name: string;
+  source: PlaceNameSource;
+}
+
+/**
+ * The panel's title for a point, and where it came from: the host's
+ * `location-name` → the station picked in the list → the coordinates (when
+ * `prefer-coordinates` is set) → the nearest station → the coordinates when
+ * there is no station. Hosts that pin an exact map click (e.g. Mímir) set
+ * `prefer-coordinates`, so the clicked lat/lon is shown verbatim and never
+ * snapped to the nearest station.
+ */
+export function placeTitle(opts: {
+  locationName: string | null;
+  pickedName: string;
+  preferCoordinates: boolean;
+  places: Place[];
+  lat: number;
+  lon: number;
+  t: Labels;
+}): PlaceTitle {
+  const { places, lat, lon, t } = opts;
+  if (opts.locationName) return { name: opts.locationName, source: "attribute" };
+  if (opts.pickedName) return { name: opts.pickedName, source: "picked" };
+  // Without a valid point we can't measure distances — fall back to the first
+  // known station (avoids rendering "NaN°N NaN°E" in sample / partial states).
+  if (isNaN(lat) || isNaN(lon)) return { name: places[0]?.name ?? "", source: "station" };
+  if (opts.preferCoordinates) return { name: coordLabel(lat, lon, t), source: "coordinates" };
+  let best: Place | null = null;
+  let bd = Infinity;
+  for (const p of places) {
+    const d = (p.lat - lat) ** 2 + (p.lon - lon) ** 2 * 0.2;
+    if (d < bd) {
+      bd = d;
+      best = p;
+    }
+  }
+  return best
+    ? { name: best.name, source: "station" }
+    : { name: coordLabel(lat, lon, t), source: "coordinates" };
+}
+
+/**
+ * The line under the panel's title: the point's coordinates when the title is
+ * a place's name (under a title that is the coordinates they would only repeat
+ * it), then the corrected-forecast badge, if any.
+ */
+export function locationSubHtml(
+  lat: number,
+  lon: number,
+  source: PlaceNameSource,
+  badgeHtml: string,
+  t: Labels,
+): string {
+  const showCoords = source !== "coordinates" && !isNaN(lat) && !isNaN(lon);
+  return (showCoords ? esc(coordLabel(lat, lon, t)) : "") + badgeHtml;
+}
+
 /**
  * Group hourly points into local calendar days, starting at today: the day of
  * column `todayIdx`. Pass `currentIndex()`, the column that contains now, not

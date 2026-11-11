@@ -24,24 +24,26 @@ import {
 } from "./graph-card";
 import { labels, type Labels } from "./i18n";
 import {
-  coordLabel,
   correctedBadgeHtml,
   dayChipsHtml,
   draggablePanelHeaderHtml,
   formatUtcMetaTime,
   groupDays,
+  locationSubHtml,
   metaFooterHtml,
   nowCardHtml,
   overlayHtml,
   panelSummary,
   panelTableHtml,
   pillHtml,
+  placeTitle,
   selDayCardHtml,
   stationPlaceNoteHtml,
   stationRowsHtml,
   type DayGroup,
   type ModelOption,
   type Place,
+  type PlaceTitle,
 } from "./landing";
 import { renderMapPanelGraph } from "./map-panel-graph";
 import { esc } from "./render";
@@ -1087,28 +1089,23 @@ export class BelMeteogram extends HTMLElement {
     return places;
   }
 
-  /** Display name for the current point: attribute → picked → coordinate (when
-   *  `prefer-coordinates` is set) → nearest station. Hosts that pin an exact
-   *  map click (e.g. Mimir) set `prefer-coordinates` so the clicked lat/lon is
-   *  shown verbatim and never snapped to the nearest station. */
+  /** The panel's title for the current point, and where it came from (see
+   *  {@link placeTitle}). */
+  private placeTitle(places: Place[], lat: number, lon: number, t: Labels): PlaceTitle {
+    return placeTitle({
+      locationName: this.getAttribute("location-name"),
+      pickedName: this.pickedPlaceName,
+      preferCoordinates: this.hasAttribute("prefer-coordinates"),
+      places,
+      lat,
+      lon,
+      t,
+    });
+  }
+
+  /** Display name for the current point: the panel's title. */
   private placeName(places: Place[], lat: number, lon: number, t: Labels): string {
-    const attr = this.getAttribute("location-name");
-    if (attr) return attr;
-    if (this.pickedPlaceName) return this.pickedPlaceName;
-    // Without a valid point we can't measure distances — fall back to the first
-    // known station (avoids rendering "NaN°N NaN°E" in sample / partial states).
-    if (isNaN(lat) || isNaN(lon)) return places[0]?.name ?? "";
-    if (this.hasAttribute("prefer-coordinates")) return coordLabel(lat, lon, t);
-    let best: Place | null = null;
-    let bd = Infinity;
-    for (const p of places) {
-      const d = (p.lat - lat) ** 2 + (p.lon - lon) ** 2 * 0.2;
-      if (d < bd) {
-        bd = d;
-        best = p;
-      }
-    }
-    return best?.name ?? coordLabel(lat, lon, t);
+    return this.placeTitle(places, lat, lon, t).name;
   }
 
   /**
@@ -1272,7 +1269,8 @@ export class BelMeteogram extends HTMLElement {
     const lon = parseFloat(this.getAttribute("location-lon") ?? "");
     const models = this.models();
     const places = this.placeList(lat, lon);
-    const place = this.placeName(places, lat, lon, t);
+    const title = this.placeTitle(places, lat, lon, t);
+    const place = title.name;
     const model = models.find((m) => m.id === this.forecastId) ?? models[0];
     // Matched on position, not on the displayed name. With `prefer-coordinates`
     // (which Mimir always sets) the header shows a coordinate, so a name
@@ -1295,15 +1293,21 @@ export class BelMeteogram extends HTMLElement {
       lang: lang.toUpperCase(),
       tzOffsetMin: this.tzOffsetMin,
     });
-    const sub =
-      (isNaN(lat) || isNaN(lon) ? "" : esc(coordLabel(lat, lon, t))) +
-      (this.status === "ready" && this.correctedStation
+    // Coordinates under a place's name only: under a title that is the
+    // coordinates they would repeat it. The badge stays either way.
+    const sub = locationSubHtml(
+      lat,
+      lon,
+      title.source,
+      this.status === "ready" && this.correctedStation
         ? correctedBadgeHtml(
             this.corrections,
             localName(this.correctedStation.name, lang),
             t,
           )
-        : "");
+        : "",
+      t,
+    );
     const note = stationPlaceNoteHtml(
       this.getAttribute("station-place"),
       parseFloat(this.getAttribute("station-place-km") ?? ""),
