@@ -644,9 +644,14 @@ test.describe("station-corrected forecast @mobile", () => {
     });
   }
 
-  async function mount(page: Page, lat: number, lon: number): Promise<Locator> {
+  async function mount(
+    page: Page,
+    lat: number,
+    lon: number,
+    name?: string,
+  ): Promise<Locator> {
     await page.evaluate(
-      ({ lat, lon, config }) => {
+      ({ lat, lon, config, name }) => {
         const el = document.createElement("bel-meteogram");
         el.id = "api-full";
         el.setAttribute("mode", "full");
@@ -656,12 +661,17 @@ test.describe("station-corrected forecast @mobile", () => {
         el.setAttribute("prefer-coordinates", "");
         el.setAttribute("location-lat", String(lat));
         el.setAttribute("location-lon", String(lon));
+        if (name) el.setAttribute("location-name", name);
         document.querySelector("main")!.prepend(el);
       },
-      { lat, lon, config: CONFIG },
+      { lat, lon, config: CONFIG, name },
     );
     return page.locator("#api-full");
   }
+
+  /** The panel's title and the line under it, in either layout. */
+  const title = (widget: Locator) => widget.locator(".panel-loc-name, .loc-name").first();
+  const subLine = (widget: Locator) => widget.locator(".panel-loc-sub, .loc-sub").first();
 
   test("a point by a station listed by ref shows the corrected forecast", async ({
     page,
@@ -675,6 +685,11 @@ test.describe("station-corrected forecast @mobile", () => {
     const badge = widget.locator(".corrected");
     await expect(badge).toBeVisible();
     await expect(badge).toHaveText("");
+    // The title is the point's coordinates, so the line under it has only
+    // the badge.
+    await expect(title(widget)).toHaveText("65.68°N 18.09°W");
+    await expect(subLine(widget)).toHaveText("");
+    await expect(subLine(widget).locator(".corrected")).toHaveCount(1);
     await expect(badge).toHaveAttribute(
       "title",
       "Corrected against observations at Akureyri: temp, wind",
@@ -692,11 +707,23 @@ test.describe("station-corrected forecast @mobile", () => {
 
     // Loaded, so the badge is absent and not merely not drawn yet
     await expect(widget.locator(".sk")).toHaveCount(0);
-    await expect(widget.locator(".loc-sub, .panel-loc-sub").first()).toBeVisible();
+    await expect(title(widget)).toHaveText("64.14°N 21.88°W");
     await expect(widget.locator(".corrected")).toHaveCount(0);
+    // Under a title that is the coordinates, the line doesn't repeat them.
+    await expect(subLine(widget)).toHaveText("");
     expect(requested.filter((u) => u.includes("/data/point/"))).toEqual([
       `${API}/data/point/schedule/island-8/2/latlon/64.135,-21.877/meteogram.json`,
     ]);
+  });
+
+  test("a named place keeps its coordinates under the title", async ({ page }) => {
+    await mockApi(page, []);
+    await openFixture(page);
+    const widget = await mount(page, 64.135, -21.877, "Reykjavík");
+
+    await expect(widget.locator(".sk")).toHaveCount(0);
+    await expect(title(widget)).toHaveText("Reykjavík");
+    await expect(subLine(widget)).toHaveText("64.14°N 21.88°W");
   });
 });
 
