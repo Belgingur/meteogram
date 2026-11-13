@@ -24,6 +24,13 @@ export default defineConfig({
       use: { ...devices["iPhone 13"] },
       grep: /@mobile/,
     },
+    // Desktop WebKit, for the styled chart scrollbar only: the phone project
+    // has a coarse pointer, where the widget keeps the native overlay bar.
+    {
+      name: "desktop-webkit",
+      use: { ...devices["Desktop Safari"] },
+      testMatch: /chart-scrollbar\.spec\.ts/,
+    },
   ],
   webServer: {
     command: "npm run dev -- --host 127.0.0.1 --port 4173",

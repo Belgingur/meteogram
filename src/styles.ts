@@ -874,23 +874,25 @@ input:focus-visible,
    scroll, so on a desktop there was nothing at all to say that ~89% of the
    forecast lay to the right — it only appeared when the panel was resized.
    Styling the scrollbar opts out of the overlay behaviour. Touch devices keep
-   the native overlay: a swipe is its own affordance there, and a permanent 8px
-   rail would cost real height on a short phone in landscape. */
+   the native overlay: a swipe is its own affordance there, and a permanent
+   rail would cost real height on a short phone in landscape.
+
+   12px with a thumb at 4.1 : 1 against the panel, so the bar can be seen and
+   grabbed: until the chart has an overview scrubber, it is the only way along
+   the chart with a mouse. No scrollbar-width / scrollbar-color here: a browser
+   that supports those ignores the ::-webkit-scrollbar sizes, and drew its own
+   thin, faint bar instead. */
 @media (hover: hover) and (pointer: fine) {
-  .chart-scroll {
-    scrollbar-width: thin;
-    scrollbar-color: #C6D4E0 transparent;
-  }
-  .chart-scroll::-webkit-scrollbar { height: 8px; }
+  .chart-scroll::-webkit-scrollbar { height: 12px; }
   .chart-scroll::-webkit-scrollbar-track {
     background: transparent;
     margin: 0 2px;
   }
   .chart-scroll::-webkit-scrollbar-thumb {
-    background: #C6D4E0;
-    border-radius: 4px;
+    background: #6E7E8A;
+    border-radius: 6px;
   }
-  .chart-scroll::-webkit-scrollbar-thumb:hover { background: #A8BCCC; }
+  .chart-scroll::-webkit-scrollbar-thumb:hover { background: #4F5C66; }
 }
 .chart-scroll svg text { pointer-events: none; }
 .chart-lane .chart-chip { font-size: 10px; padding: 2px 7px; border-radius: 7px; }
