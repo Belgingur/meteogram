@@ -35,6 +35,7 @@ import {
   overlayHtml,
   panelSummary,
   chipPlace,
+  searchFocusSelector,
   panelTableHtml,
   pillHtml,
   placeTitle,
@@ -570,6 +571,18 @@ export class BelMeteogram extends HTMLElement {
     this.setAttribute("location-lon", String(lon));
     this.suppressAttrCallback = false;
     this.load();
+  }
+
+  /**
+   * Open the settings dialog at its station search, with the search field
+   * focused on a device with a fine pointer (not on a phone, where focusing it
+   * would pop the keyboard up). Full mode only: graph mode has no dialog.
+   */
+  openSearch(): void {
+    if (!this.isFull) return;
+    this.settingsOpen = true;
+    this.focusAfterPaint = searchFocusSelector(matchMedia("(pointer: fine)").matches);
+    this.paint();
   }
 
   private emitStatus(error?: string): void {

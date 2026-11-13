@@ -181,6 +181,11 @@ copy of the station's coordinates (a map label, say) should keep them within
 `loadChartLocation(lat, lon, name?)` is kept from the previous widget for
 programmatic location changes.
 
+`openSearch()` opens the settings dialog at its station search, so a host can
+offer its own search button. With a fine pointer the search field takes focus;
+on a touch screen the dialog does, so the keyboard doesn't jump up. Full mode
+only.
+
 ### Events
 
 `bel-meteogram-status` — a `CustomEvent` fired on every load transition with
