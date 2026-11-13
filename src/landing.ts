@@ -373,6 +373,40 @@ export function formatUtcOffset(
  * a point of unknown zone reads `BEL-BR · … · EN` rather than trailing a bare
  * middot.
  */
+/** What the expanded panel shows: the table, the graph, or both side by side. */
+export type ExpandedView = "table" | "graph" | "both";
+
+/** A stored choice, or Both when there is none or it isn't one of the three. */
+export function expandedView(stored: unknown): ExpandedView {
+  return stored === "table" || stored === "graph" ? stored : "both";
+}
+
+/**
+ * The expanded panel's body: the Table / Graph / Both control, then the
+ * chosen columns. A column on its own takes the whole width (CSS). The button
+ * that leaves the expanded layout sits in the graph's readout, so with the
+ * table alone the bar carries `collapseBtn` instead.
+ */
+export function expandedBodyHtml(
+  view: ExpandedView,
+  left: string,
+  right: string,
+  collapseBtn: string,
+  t: Labels,
+): string {
+  const tab = (v: ExpandedView, label: string) =>
+    `<button class="tab${view === v ? " on" : ""}" type="button" data-exp-view="${v}" aria-pressed="${view === v}">${esc(label)}</button>`;
+  return `
+      <div class="exp-bar">
+        <div class="tabs exp-tabs">${tab("table", t.table)}${tab("graph", t.graph)}${tab("both", t.both)}</div>
+        ${view === "table" ? collapseBtn : ""}
+      </div>
+      <div class="exp-body exp-${view}">
+        ${view === "graph" ? "" : `<div class="exp-left">${left}</div>`}
+        ${view === "table" ? "" : `<div class="exp-right">${right}</div>`}
+      </div>`;
+}
+
 /**
  * Where focus goes when the settings dialog opens for a search: the search
  * field with a fine pointer, the dialog itself otherwise, so a phone's

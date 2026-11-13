@@ -36,6 +36,9 @@ import {
   panelSummary,
   chipPlace,
   searchFocusSelector,
+  expandedBodyHtml,
+  expandedView,
+  type ExpandedView,
   panelTableHtml,
   pillHtml,
   placeTitle,
@@ -47,7 +50,7 @@ import {
   type Place,
   type PlaceTitle,
 } from "./landing";
-import { renderMapPanelGraph } from "./map-panel-graph";
+import { fsCollapseSvg, renderMapPanelGraph } from "./map-panel-graph";
 import { esc } from "./render";
 import { componentStyles, sheetStyles } from "./styles";
 import { sampleHourPoints, sampleModels, samplePlaces } from "./sample";
@@ -91,6 +94,8 @@ interface MapPanelPersisted {
    */
   scrubUtcMs?: number;
   view?: "table" | "graph";
+  /** The expanded panel's Table / Graph / Both choice. */
+  expandedView?: ExpandedView;
   panelPos?: { x: number; y: number };
   /** User-set panel size (map-panel resize grip). 0/absent → defaults. */
   panelSize?: { w: number; h: number };
@@ -309,6 +314,8 @@ export class BelMeteogram extends HTMLElement {
   private forecastId = "";
   private pickedPlaceName = "";
   private view: "table" | "graph" = "table";
+  /** The expanded panel's view, separate from the docked panel's Table/Graph. */
+  private expandedView: ExpandedView = "both";
   /** Shared by the mobile day chips and the desktop day list (0 = today) */
   private selectedDay = 0;
   private settingsOpen = false;
@@ -477,6 +484,7 @@ export class BelMeteogram extends HTMLElement {
     if (persisted.view === "table" || persisted.view === "graph") {
       this.view = persisted.view;
     }
+    this.expandedView = expandedView(persisted.expandedView);
     if (
       persisted.panelPos &&
       typeof persisted.panelPos.x === "number" &&
@@ -633,6 +641,7 @@ export class BelMeteogram extends HTMLElement {
     writeMapPanelState({
       ...time,
       view: this.view,
+      expandedView: this.expandedView,
       panelPos:
         this.panelPos.x >= 0
           ? { x: this.panelPos.x, y: this.panelPos.y }
@@ -1387,7 +1396,11 @@ export class BelMeteogram extends HTMLElement {
         )
       : "";
 
-    const cls = `page ${wide ? "wide wide-2a" : "narrow"}${expanded ? " is-expanded" : ""}${landscape ? " is-fullscreen" : ""}${closable ? " page--closable" : ""} view-${this.view}`;
+    // The view on screen, which picks where the analysis line goes (the
+    // graph's legend or the footer). Expanded with one view alone, that's it.
+    const shownView =
+      expanded && this.expandedView !== "both" ? this.expandedView : this.view;
+    const cls = `page ${wide ? "wide wide-2a" : "narrow"}${expanded ? " is-expanded" : ""}${landscape ? " is-fullscreen" : ""}${closable ? " page--closable" : ""} view-${shownView}`;
     const meta =
       this.status === "ready" && wide ? metaFooterHtml(this.metaLine(t)) : "";
     // Landscape pins the panel to fill the modal (CSS), so it carries no inline
@@ -1513,17 +1526,15 @@ export class BelMeteogram extends HTMLElement {
     nowPoint: HourPoint,
     t: Labels,
   ): string {
-    return `
-      <div class="exp-body">
-        <div class="exp-left">
-          <div class="now-wrap">${nowCardHtml(nowPoint, t, 44, 50)}</div>
+    return expandedBodyHtml(
+      this.expandedView,
+      `<div class="now-wrap">${nowCardHtml(nowPoint, t, 44, 50)}</div>
           ${dayChipsHtml(days, si, false)}
-          ${panelTableHtml(days[si], t)}
-        </div>
-        <div class="exp-right">
-          <div class="graph-view graph-view-2a"><div class="graph-host"></div></div>
-        </div>
-      </div>`;
+          ${panelTableHtml(days[si], t)}`,
+      `<div class="graph-view graph-view-2a"><div class="graph-host"></div></div>`,
+      `<button class="chart-fs-btn exp-collapse" type="button" aria-label="${esc(t.exitFullscreen)}" title="${esc(t.exitFullscreen)}">${fsCollapseSvg}</button>`,
+      t,
+    );
   }
 
   /**
@@ -1627,6 +1638,21 @@ export class BelMeteogram extends HTMLElement {
         const view = tab.dataset.view as "table" | "graph";
         if (view !== this.view) {
           this.view = view;
+          this.persistMapPanel();
+          this.paint();
+        }
+      });
+    }
+
+    // With the table alone, the bar carries the graph readout's collapse button.
+    q<HTMLButtonElement>(".exp-collapse")?.addEventListener("click", () => this.collapsePanel());
+
+    // Expanded panel: Table / Graph / Both
+    for (const tab of this.body.querySelectorAll<HTMLButtonElement>(".tab[data-exp-view]")) {
+      tab.addEventListener("click", () => {
+        const view = expandedView(tab.dataset.expView);
+        if (view !== this.expandedView) {
+          this.expandedView = view;
           this.persistMapPanel();
           this.paint();
         }

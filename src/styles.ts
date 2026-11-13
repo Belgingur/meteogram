@@ -687,7 +687,17 @@ input:focus-visible,
   animation: bel-resize-hint 1s ease-in-out 2;
 }
 
+/* Table / Graph / Both: the docked panel's segmented control, at the width of
+   the left column so it doesn't stretch across a wide panel. */
+.exp-bar { flex: none; display: flex; align-items: center; justify-content: space-between; padding-right: 14px; }
+.wide .exp-tabs { flex: none; width: 272px; margin: 4px 14px 6px; }
+.wide .exp-tabs .tab { padding: 6px 0; font-size: 12.5px; }
 .exp-body { flex: 1; min-height: 0; display: flex; }
+/* One view on its own takes the whole width. */
+.exp-table .exp-left { flex: 1; width: auto; }
+.exp-table .exp-left .now-stats { grid-template-columns: 1fr 1fr 1.3fr; }
+.exp-table .exp-left .stat--wind-card { grid-column: auto; }
+.exp-graph .exp-right { margin-left: 0; border-radius: 14px 14px 0 0; box-shadow: none; }
 .exp-left {
   flex: none;
   width: 300px;
