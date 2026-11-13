@@ -1,8 +1,8 @@
 import { expect, test } from "@playwright/test";
 
-// Playwright's Chromium hides scrollbars, and on macOS the widget's
-// `scrollbar-width: thin` bar is an overlay that takes no room. This file shows
-// scrollbars, and lets the widget's ::-webkit-scrollbar rule apply at 14px, so
+// Playwright's Chromium hides scrollbars, and on macOS a native bar is an
+// overlay that takes no room. This file shows scrollbars, and sets the
+// widget's ::-webkit-scrollbar rule to 14px, so
 // the chart's bar takes room as a classic (e.g. Windows) scrollbar does, at a
 // thickness the widget must measure rather than assume. It is a file of its own
 // because launch options apply per worker.
