@@ -451,8 +451,9 @@ export function formatTempTick(v: number): string {
 export function formatWindTick(v: number): string {
   return `${v}`;
 }
-export function formatPrecipTick(mm: number): string {
-  return `${mm}`;
+export function formatPrecipTick(mm: number, t: Labels): string {
+  const s = `${mm}`;
+  return t.decimal === "." ? s : s.replace(".", t.decimal);
 }
 
 /** Gap between a day's left divider and its header text. */
@@ -664,14 +665,14 @@ function buildAxisStrip(L: MeteogramLayout, s: MeteogramScales): string {
  * colliding with the temp labels — same reasoning (and same side) as the desktop
  * chart's right-hand scale.
  */
-function buildRightAxisStrip(L: MeteogramLayout, s: MeteogramScales): string {
+function buildRightAxisStrip(L: MeteogramLayout, s: MeteogramScales, t: Labels): string {
   const parts: string[] = [dividerLines(L, L.rightAxisW)];
   for (const mm of s.precipTicks) {
     parts.push(
       text(
         L.axisInset,
         L.precipBase - s.ph(mm) + TICK_LABEL_DY,
-        formatPrecipTick(mm),
+        formatPrecipTick(mm, t),
         PRECIP_TICK_COLOR,
         L.axisFont,
         700,
@@ -929,7 +930,7 @@ export function buildMeteogram(
   return {
     svg,
     axisSvg: buildAxisStrip(L, s),
-    rightAxisSvg: buildRightAxisStrip(L, s),
+    rightAxisSvg: buildRightAxisStrip(L, s, t),
     geo,
   };
 }

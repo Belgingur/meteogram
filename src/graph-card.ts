@@ -1,5 +1,5 @@
 import { DATA_COLORS } from "./colors";
-import type { Labels } from "./i18n";
+import { formatDecimal, type Labels } from "./i18n";
 import {
   buildMeteogram,
   esc,
@@ -59,7 +59,7 @@ export function windText(p: HourPoint): string {
 export function scrubValueText(p: HourPoint, t: Labels): string {
   const temp = p.tempC === null ? "–" : `${Math.round(p.tempC)}°`;
   const wind = p.windMs === null ? "–" : `${windText(p)} m/s ${compassLabel(p.dirDeg, t)}`.trim();
-  return `${scrubTimeLabel(p, t)}, ${temp}, ${p.precipMm.toFixed(1)} mm, ${wind}`;
+  return `${scrubTimeLabel(p, t)}, ${temp}, ${formatDecimal(p.precipMm, 1, t)} mm, ${wind}`;
 }
 
 /**
@@ -447,7 +447,7 @@ export function renderGraphCard(
     roTime.textContent = scrubTimeLabel(p, t);
     roTemp.textContent = p.tempC === null ? "–" : `${Math.round(p.tempC)}°`;
     roTemp.style.color = p.tempC === null ? DATA_COLORS.neutral : tempColor(Math.round(p.tempC));
-    roPrecip.textContent = `${p.precipMm.toFixed(1)} mm`;
+    roPrecip.textContent = `${formatDecimal(p.precipMm, 1, t)} mm`;
     roWindText.textContent = windText(p);
     if (p.dirDeg !== shownDir) {
       roArrow.innerHTML = arrowSvg(p.dirDeg, 14, "#14202B");

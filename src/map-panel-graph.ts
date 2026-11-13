@@ -1,5 +1,5 @@
 import { DATA_COLORS } from "./colors";
-import type { Labels } from "./i18n";
+import { formatDecimal, type Labels } from "./i18n";
 import {
   arrowSvg,
   compassLabel,
@@ -468,7 +468,7 @@ function buildAxisSvg(L: ChartLayout): string {
  * (they'd collide with the temp labels) — they go here instead, in the precip
  * blue, and stay fixed while the chart scrolls horizontally.
  */
-function buildRightAxisSvg(L: ChartLayout): string {
+function buildRightAxisSvg(L: ChartLayout, t: Labels): string {
   const rightW = L.rightAxisW;
   const ph = precipHeight(L);
   const size = L.axisFont;
@@ -480,7 +480,7 @@ function buildRightAxisSvg(L: ChartLayout): string {
       text(
         5,
         L.precipBase - ph(mm) + TICK_LABEL_DY,
-        formatPrecipTick(mm),
+        formatPrecipTick(mm, t),
         PRECIP_TICK_COLOR,
         size,
         700,
@@ -913,7 +913,7 @@ export function chartBlock(
   withRail = false,
 ): string {
   const axis = buildAxisSvg(L);
-  const rightAxis = buildRightAxisSvg(L);
+  const rightAxis = buildRightAxisSvg(L, t);
   const { svg, geo } = buildPlotSvg(points, t, scrubIdx, nowIdx, L);
   const chips =
     laneChip(L.laneChipY[0], "temp", t.laneTemp) +
@@ -1010,7 +1010,7 @@ function readoutHtml(
           <div class="ro-time">${esc(scrubTimeLabel(p, t))}</div>
           <div class="ro-vals">
             <span class="ro-temp" style="color:${tc}">${temp}</span>
-            <span class="ro-precip">${p.precipMm.toFixed(1)} mm</span>
+            <span class="ro-precip">${formatDecimal(p.precipMm, 1, t)} mm</span>
             <span class="ro-wind">
               <span class="ro-wind-text">${esc(windText(p))}</span>
               <span class="ro-arrow">${arrowSvg(p.dirDeg, 13, "#14202B")}</span>
@@ -1185,7 +1185,7 @@ export function renderMapPanelGraph(
     roTemp.textContent = p.tempC === null ? "–" : `${Math.round(p.tempC)}°`;
     roTemp.style.color =
       p.tempC === null ? DATA_COLORS.neutral : tempColorPanel(Math.round(p.tempC));
-    roPrecip.textContent = `${p.precipMm.toFixed(1)} mm`;
+    roPrecip.textContent = `${formatDecimal(p.precipMm, 1, opts.t)} mm`;
     roWindText.textContent = windText(p);
     if (p.dirDeg !== shownDir) {
       roArrow.innerHTML = arrowSvg(p.dirDeg, 13, "#14202B");

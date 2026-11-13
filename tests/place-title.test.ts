@@ -57,9 +57,9 @@ describe("placeTitle", () => {
     });
   });
 
-  it("writes the coordinates with the language's compass letter", () => {
+  it("writes the coordinates with the language's compass letter and decimal separator", () => {
     expect(placeTitle({ ...base, preferCoordinates: true, t: labels("is") }).name).toBe(
-      "64.18°N 21.85°V",
+      "64,18°N 21,85°V",
     );
   });
 });

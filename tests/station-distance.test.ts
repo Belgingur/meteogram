@@ -25,13 +25,13 @@ describe("distanceKm", () => {
 
 describe("distanceLabel", () => {
   it("keeps a decimal below 10 km and rounds above", () => {
-    expect(distanceLabel(3.46)).toBe("3.5 km");
-    expect(distanceLabel(12.4)).toBe("12 km");
-    expect(distanceLabel(340.6)).toBe("341 km");
+    expect(distanceLabel(3.46, labels("en"))).toBe("3.5 km");
+    expect(distanceLabel(12.4, labels("en"))).toBe("12 km");
+    expect(distanceLabel(340.6, labels("en"))).toBe("341 km");
   });
 
   it("says nothing for a distance it cannot state", () => {
-    expect(distanceLabel(Number.NaN)).toBe("");
+    expect(distanceLabel(Number.NaN, labels("en"))).toBe("");
   });
 });
 
