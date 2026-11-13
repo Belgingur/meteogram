@@ -54,7 +54,7 @@ import { fsCollapseSvg, renderMapPanelGraph } from "./map-panel-graph";
 import { esc } from "./render";
 import { componentStyles, sheetStyles } from "./styles";
 import { sampleHourPoints, sampleModels, samplePlaces } from "./sample";
-import { toHourPoints } from "./transform";
+import { inDisplayZone, shownOffsetMin, toHourPoints } from "./transform";
 import type { ForecastUrl, HourPoint, StationMetadata } from "./types";
 
 const FONT_LINK_ID = "bel-meteogram-nunito";
@@ -230,6 +230,12 @@ function isEditableTarget(target: EventTarget | undefined): boolean {
  *                   the readout. Removing it returns to the current hour.
  *                   Repaints in place; no refetch, so a host can step it on
  *                   every timeline tick. Not persisted as the reader's scrub.
+ *   display-time-zone  the clock to show times on, as an IANA zone name
+ *                   (e.g. Atlantic/Reykjavik): the table, the graph, the day
+ *                   chips, the night bands and the selected time, each hour
+ *                   at that zone's own offset. The header names the zone when
+ *                   its offset differs from the point's. Absent or unknown to
+ *                   the browser: the point's own offset, as before.
  *   hours           graph window, e.g. 48 or 72 (default 48)
  *   language        "is" (default) | "en" | "fo" | "pl" | "es" | "pt"
  *   hide-language   full mode: leave the language choice out of the settings
@@ -291,11 +297,14 @@ export class BelMeteogram extends HTMLElement {
     "station-place",
     "station-place-km",
     "selected-time",
+    "display-time-zone",
   ];
 
   private root: ShadowRoot;
   private body: HTMLDivElement;
   private points: HourPoint[] = [];
+  /** The points on the forecast point's own clock, before `display-time-zone`. */
+  private pointClockPoints: HourPoint[] = [];
   private status: "loading" | "ready" | "error" = "loading";
   private started = false;
   private loadToken = 0;
@@ -552,10 +561,27 @@ export class BelMeteogram extends HTMLElement {
     });
   };
 
+  /** The host's display clock: an IANA zone name, or null for the point's own. */
+  private get displayTimeZone(): string | null {
+    return this.getAttribute("display-time-zone")?.trim() || null;
+  }
+
+  /** Keep the points as loaded, and show them on the display clock. */
+  private setPoints(points: HourPoint[]): void {
+    this.pointClockPoints = points;
+    this.points = inDisplayZone(points, this.displayTimeZone);
+  }
+
   attributeChangedCallback(name: string): void {
     if (!this.started || this.suppressAttrCallback) return;
     if (name === "selected-time") {
       this.applySelectedTime();
+      return;
+    }
+    // Same instants on another clock: no refetch.
+    if (name === "display-time-zone") {
+      this.setPoints(this.pointClockPoints);
+      this.paint();
       return;
     }
     // These only change rendered strings (labels / meta footer), not the data.
@@ -796,9 +822,7 @@ export class BelMeteogram extends HTMLElement {
     if (this.hasAttribute("sample")) {
       this.corrections = [];
       this.correctedStation = null;
-      this.points = sampleHourPoints(
-        this.isFull ? SAMPLE_FULL_HOURS : this.hours,
-      );
+      this.setPoints(sampleHourPoints(this.isFull ? SAMPLE_FULL_HOURS : this.hours));
       if (this.isFull) {
         this.rawForecasts = sampleModels.map((m) => ({ ...m, url: "" }));
         this.rawStations = samplePlaces.map((p, i) => ({
@@ -891,7 +915,7 @@ export class BelMeteogram extends HTMLElement {
       this.rawStations = meta.stations ?? [];
       this.corrections = Object.keys(data.data.meta?.corrections ?? {});
       this.correctedStation = this.corrections.length ? station : null;
-      this.points = toHourPoints(data.data, windowH);
+      this.setPoints(toHourPoints(data.data, windowH));
       const offset = data.data.meta?.location_timezone_offset;
       this.tzOffsetMin = typeof offset === "number" ? offset : null;
       const times = runTimes(
@@ -1337,7 +1361,7 @@ export class BelMeteogram extends HTMLElement {
       // The landscape sheet hides the title block; elsewhere the title names it.
       place: chipPlace(title, !landscape),
       lang: lang.toUpperCase(),
-      tzOffsetMin: this.tzOffsetMin,
+      tzOffsetMin: shownOffsetMin(this.tzOffsetMin, this.displayTimeZone, Date.now()),
     });
     // Coordinates under a place's name only: under a title that is the
     // coordinates they would repeat it. The badge stays either way.
