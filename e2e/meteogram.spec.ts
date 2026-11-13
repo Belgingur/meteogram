@@ -1601,3 +1601,43 @@ test.describe("openSearch() @mobile", () => {
     await expect(card.locator(".overlay")).toHaveCount(0);
   });
 });
+
+test.describe("display-time-zone @mobile", () => {
+  test("shows the same hour on the host's clock, and back without it", async ({ page }) => {
+    await page.setViewportSize({ width: 800, height: 600 });
+    await openFixture(page);
+
+    // The sample is on UTC; the clock is frozen at 12:00 UTC.
+    const graph = page.locator("#graph-card");
+    const time = graph.locator(".ro-time");
+    await expect(time).toHaveText("Wed 8 July · 12:00");
+
+    await graph.evaluate((el) => el.setAttribute("display-time-zone", "America/Sao_Paulo"));
+    await expect(time).toHaveText("Wed 8 July · 09:00");
+
+    await graph.evaluate((el) => el.setAttribute("display-time-zone", "Not/AZone"));
+    await expect(time).toHaveText("Wed 8 July · 12:00");
+
+    await graph.evaluate((el) => el.removeAttribute("display-time-zone"));
+    await expect(time).toHaveText("Wed 8 July · 12:00");
+  });
+
+  test("the panel's table, day and header follow the display clock", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openFixture(page);
+
+    const mobile = page.locator("#mobile-full");
+    const nowRow = mobile.locator(".hrow-now .h-time");
+    await expect(nowRow).toHaveText("12");
+    await expect(mobile.locator(".pill > span")).not.toContainText("UTC");
+
+    await mobile.evaluate((el) => el.setAttribute("display-time-zone", "Asia/Tokyo"));
+    // 12:00 UTC is 21:00 in Tokyo, still the 8th.
+    await expect(nowRow).toHaveText("21");
+    await expect(mobile.locator(".pill > span")).toContainText("UTC+9");
+
+    await mobile.evaluate((el) => el.removeAttribute("display-time-zone"));
+    await expect(nowRow).toHaveText("12");
+    await expect(mobile.locator(".pill > span")).not.toContainText("UTC");
+  });
+});

@@ -126,3 +126,81 @@ export function toHourPoints(api: MeteogramData, maxHours: number): HourPoint[] 
   }
   return points;
 }
+
+/** One formatter per zone name; null for a name the browser doesn't know. */
+const zoneFormats = new Map<string, Intl.DateTimeFormat | null>();
+
+function zoneFormat(zone: string): Intl.DateTimeFormat | null {
+  const cached = zoneFormats.get(zone);
+  if (cached !== undefined) return cached;
+  let f: Intl.DateTimeFormat | null = null;
+  try {
+    f = new Intl.DateTimeFormat("en-US", {
+      timeZone: zone,
+      hourCycle: "h23",
+      year: "numeric",
+      month: "numeric",
+      day: "numeric",
+      hour: "numeric",
+      minute: "numeric",
+    });
+  } catch (err) {
+    if (!(err instanceof RangeError)) throw err;
+    // Warned once per name: the result is cached.
+    console.warn(
+      `bel-meteogram: unknown display-time-zone "${zone}"; showing the point's own time`,
+    );
+  }
+  zoneFormats.set(zone, f);
+  return f;
+}
+
+/** Whether the browser knows an IANA zone name. An unknown one warns once. */
+export function isKnownTimeZone(zone: string): boolean {
+  return zoneFormat(zone) !== null;
+}
+
+/**
+ * Minutes `zone` is ahead of UTC at the instant `utcMs` (the API's convention:
+ * local = UTC + offset), or null for a zone the browser doesn't know. Taken at
+ * each instant, so it follows a daylight-saving change.
+ */
+export function zoneOffsetMin(zone: string, utcMs: number): number | null {
+  const f = zoneFormat(zone);
+  if (!f) return null;
+  const parts: Record<string, number> = {};
+  for (const p of f.formatToParts(new Date(utcMs))) {
+    if (p.type !== "literal") parts[p.type] = Number(p.value);
+  }
+  const wall = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour % 24, parts.minute);
+  const minute = Math.floor(utcMs / 60_000) * 60_000;
+  return Math.round((wall - minute) / 60_000);
+}
+
+/**
+ * The points with their local time on the host's display clock: each hour
+ * shifted by `zone`'s own offset at that hour. Without a zone, or with one the
+ * browser doesn't know, the points are returned as they are, on the point's
+ * own clock.
+ */
+export function inDisplayZone(points: HourPoint[], zone: string | null): HourPoint[] {
+  if (!zone || !isKnownTimeZone(zone)) return points;
+  return points.map((p) => ({
+    ...p,
+    local: new Date(p.utcMs + (zoneOffsetMin(zone, p.utcMs) ?? 0) * 60_000),
+  }));
+}
+
+/**
+ * The offset the header names: the clock the widget shows. With a display
+ * zone whose offset at `atMs` differs from the point's, the display zone's, so
+ * the reader knows whose clock it is; otherwise the point's own, as before.
+ */
+export function shownOffsetMin(
+  pointOffsetMin: number | null,
+  zone: string | null,
+  atMs: number,
+): number | null {
+  const display = zone ? zoneOffsetMin(zone, atMs) : null;
+  return display === null || display === pointOffsetMin ? pointOffsetMin : display;
+}
