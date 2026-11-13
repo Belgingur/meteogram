@@ -690,6 +690,8 @@ test.describe("station-corrected forecast @mobile", () => {
   /** The panel's title and the line under it, in either layout. */
   const title = (widget: Locator) => widget.locator(".panel-loc-name, .loc-name").first();
   const subLine = (widget: Locator) => widget.locator(".panel-loc-sub, .loc-sub").first();
+  /** The header chip: the docked panel's, or the narrow layout's pill. */
+  const chip = (widget: Locator) => widget.locator(".pill > span").first();
 
   test("a point by a station listed by ref shows the corrected forecast", async ({
     page,
@@ -729,6 +731,8 @@ test.describe("station-corrected forecast @mobile", () => {
     await expect(widget.locator(".corrected")).toHaveCount(0);
     // Under a title that is the coordinates, the line doesn't repeat them.
     await expect(subLine(widget)).toHaveText("");
+    // Nor does the chip.
+    await expect(chip(widget)).toHaveText("Island · EN · UTC");
     expect(requested.filter((u) => u.includes("/data/point/"))).toEqual([
       `${API}/data/point/schedule/island-8/2/latlon/64.135,-21.877/meteogram.json`,
     ]);
@@ -742,6 +746,24 @@ test.describe("station-corrected forecast @mobile", () => {
     await expect(widget.locator(".sk")).toHaveCount(0);
     await expect(title(widget)).toHaveText("Reykjavík");
     await expect(subLine(widget)).toHaveText("64.14°N 21.88°W");
+    await expect(chip(widget)).toHaveText("Island · Reykjavík · EN · UTC");
+  });
+
+  test("the landscape sheet, which hides the title, keeps the coordinates in the chip", async ({
+    page,
+    isMobile,
+  }) => {
+    test.skip(!isMobile, "landscape layout needs a touch device");
+    await page.setViewportSize({ width: 844, height: 390 });
+    await mockApi(page, []);
+    await openFixture(page);
+    const widget = await mount(page, 64.135, -21.877);
+
+    // Mounted outside the fixture's sized panel box, so check the layout
+    // rather than its visibility.
+    await expect(widget.locator(".page.is-fullscreen")).toHaveCount(1);
+    await expect(widget.locator(".sk")).toHaveCount(0);
+    await expect(chip(widget)).toHaveText("Island · 64.14°N 21.88°W · EN · UTC");
   });
 });
 

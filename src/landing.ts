@@ -373,6 +373,15 @@ export function formatUtcOffset(
  * a point of unknown zone reads `BEL-BR · … · EN` rather than trailing a bare
  * middot.
  */
+/**
+ * The place in the header chip. Under a title that is the point's coordinates
+ * the chip would repeat them, so it leaves the place out. The phone's landscape
+ * sheet hides the title, so there the chip keeps the place, coordinates and all.
+ */
+export function chipPlace(title: PlaceTitle, titleShown: boolean): string {
+  return titleShown && title.source === "coordinates" ? "" : title.name;
+}
+
 export function panelSummary(parts: {
   modelName: string;
   place: string;
