@@ -37,6 +37,8 @@ export interface Labels {
   wind: string;
   table: string;
   graph: string;
+  /** The expanded panel's third view: table and graph side by side */
+  both: string;
   today: string;
   tomorrow: string;
   timeCol: string;
@@ -107,6 +109,7 @@ const is: Labels = {
   wind: "Vindur",
   table: "Tafla",
   graph: "Graf",
+  both: "Bæði",
   today: "Í dag",
   tomorrow: "Á morgun",
   timeCol: "Kl.",
@@ -171,6 +174,7 @@ const en: Labels = {
   wind: "Wind",
   table: "Table",
   graph: "Graph",
+  both: "Both",
   today: "Today",
   tomorrow: "Tomorrow",
   timeCol: "Time",
@@ -240,6 +244,7 @@ const es: Labels = {
   wind: "Viento",
   table: "Tabla",
   graph: "Gráfico",
+  both: "Ambos",
   today: "Hoy",
   tomorrow: "Mañana",
   timeCol: "Hora",
@@ -304,6 +309,7 @@ const pt: Labels = {
   wind: "Vento",
   table: "Tabela",
   graph: "Gráfico",
+  both: "Ambos",
   today: "Hoje",
   tomorrow: "Amanhã",
   timeCol: "Hora",
@@ -368,6 +374,7 @@ const pl: Labels = {
   wind: "Wiatr",
   table: "Tabela",
   graph: "Wykres",
+  both: "Oba",
   today: "Dziś",
   tomorrow: "Jutro",
   timeCol: "Godz.",
@@ -432,6 +439,7 @@ const fo: Labels = {
   wind: "Vindur",
   table: "Talva",
   graph: "Grafur",
+  both: "Bæði",
   today: "Í dag",
   tomorrow: "Í morgin",
   timeCol: "Kl.",

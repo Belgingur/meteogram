@@ -484,6 +484,61 @@ test.describe("desktop", () => {
     await expect(panel.locator(".hrow-now")).toHaveCount(1);
   });
 
+  test("the expanded panel shows Table, Graph or Both, and remembers the choice", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1400, height: 900 });
+    await page.clock.install({ time: FIXED_TIME });
+    await blockWebfonts(page);
+    await page.goto("/e2e/fixture.html");
+    await page.evaluate(() => localStorage.clear());
+    await page.reload();
+
+    const panel = page.locator("#desktop-panel");
+    await panel.locator(".chart-fs-btn").click();
+    await expect(panel.locator(".page.is-expanded")).toBeVisible();
+    const tab = (v: string) => panel.locator(`.tab[data-exp-view='${v}']`);
+    const left = panel.locator(".exp-left");
+    const right = panel.locator(".exp-right");
+
+    // Both, by default
+    await expect(tab("both")).toHaveAttribute("aria-pressed", "true");
+    await expect(left.locator(".panel-table")).toBeVisible();
+    await expect(right.locator("svg.chart-plot")).toBeVisible();
+
+    // Table: the table alone, the whole width, and a way back out
+    await tab("table").click();
+    await expect(tab("table")).toHaveAttribute("aria-pressed", "true");
+    await expect(right).toHaveCount(0);
+    const page_ = panel.locator(".page.is-expanded");
+    const [lw, pw] = await Promise.all([
+      left.evaluate((el) => el.getBoundingClientRect().width),
+      page_.evaluate((el) => el.getBoundingClientRect().width),
+    ]);
+    expect(lw).toBeGreaterThan(pw * 0.9);
+    // With no graph legend to carry it, the analysis line is in the footer.
+    await expect(panel.locator(".meta-footer")).toBeVisible();
+
+    // Graph: the graph alone, the whole width
+    await tab("graph").click();
+    await expect(left).toHaveCount(0);
+    await expect(right.locator("svg.chart-plot")).toBeVisible();
+    const rw = await right.evaluate((el) => el.getBoundingClientRect().width);
+    expect(rw).toBeGreaterThan(pw * 0.9);
+
+    // Remembered across a reload
+    await page.reload();
+    await expect(panel.locator(".page.is-expanded")).toBeVisible();
+    await expect(tab("graph")).toHaveAttribute("aria-pressed", "true");
+    await expect(left).toHaveCount(0);
+
+    // With the table alone, the bar's button leaves the expanded layout.
+    await tab("table").click();
+    await panel.locator(".exp-collapse").click();
+    await expect(panel.locator(".page.is-expanded")).toHaveCount(0);
+    await expect(panel.locator(".page.wide-2a")).toBeVisible();
+  });
+
   test("desktop chips are equal and the now line matches the phone's", async ({
     page,
   }) => {

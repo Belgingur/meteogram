@@ -756,7 +756,7 @@ function laneChip(translateY: number, swatch: string, label: string): string {
 
 const fsExpandSvg =
   `<svg width="14" height="14" viewBox="0 0 16 16"><path d="M6 2H2v4M10 2h4v4M2 10v4h4M14 10v4h-4" fill="none" stroke="#14202B" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
-const fsCollapseSvg =
+export const fsCollapseSvg =
   `<svg width="14" height="14" viewBox="0 0 16 16"><path d="M2 6h4V2M14 6h-4V2M6 14v-4H2M10 14v-4h4" fill="none" stroke="#14202B" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 
 export interface MapPanelGraphOptions {
