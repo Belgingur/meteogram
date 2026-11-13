@@ -72,6 +72,9 @@ export interface Labels {
   noForecastForTime: string;
   monthsShort: string[];
   metaLine: (analysis: string, lastUpdate: string) => string;
+  /** The language's decimal separator. Kept here rather than taken from
+   *  `Intl.NumberFormat`, which some browsers lack the data for (`is`, `fo`). */
+  decimal: "." | ",";
 }
 
 const is: Labels = {
@@ -135,6 +138,7 @@ const is: Labels = {
   ],
   metaLine: (analysis, lastUpdate) =>
     `Greiningartími: ${analysis} · Síðast uppfært: ${lastUpdate}`,
+  decimal: ",",
 };
 
 const en: Labels = {
@@ -198,6 +202,7 @@ const en: Labels = {
   ],
   metaLine: (analysis, lastUpdate) =>
     `Analysis: ${analysis} · Last update: ${lastUpdate}`,
+  decimal: ".",
 };
 
 // NOTE: es/pl/pt/fo added 2026-07-14 to match Mímir's app locales. Weather terms
@@ -266,6 +271,7 @@ const es: Labels = {
   ],
   metaLine: (analysis, lastUpdate) =>
     `Análisis: ${analysis} · Última actualización: ${lastUpdate}`,
+  decimal: ",",
 };
 
 const pt: Labels = {
@@ -329,6 +335,7 @@ const pt: Labels = {
   ],
   metaLine: (analysis, lastUpdate) =>
     `Análise: ${analysis} · Última atualização: ${lastUpdate}`,
+  decimal: ",",
 };
 
 const pl: Labels = {
@@ -392,6 +399,7 @@ const pl: Labels = {
   ],
   metaLine: (analysis, lastUpdate) =>
     `Analiza: ${analysis} · Ostatnia aktualizacja: ${lastUpdate}`,
+  decimal: ",",
 };
 
 const fo: Labels = {
@@ -455,6 +463,7 @@ const fo: Labels = {
   ],
   metaLine: (analysis, lastUpdate) =>
     `Greiningartíð: ${analysis} · Seinast dagført: ${lastUpdate}`,
+  decimal: ",",
 };
 
 const all: Record<string, Labels> = { is, en, fo, pl, es, pt };
@@ -471,6 +480,15 @@ export const LANGS: { code: string; name: string }[] = [
 ];
 
 /** Default Icelandic */
+/**
+ * `v` with `digits` decimals, written with the language's separator:
+ * "0,4" in Icelandic, "0.4" in English. No thousands separators.
+ */
+export function formatDecimal(v: number, digits: number, t: Labels): string {
+  const s = v.toFixed(digits);
+  return t.decimal === "." ? s : s.replace(".", t.decimal);
+}
+
 export function labels(lang: string): Labels {
   return all[lang] ?? all.is;
 }

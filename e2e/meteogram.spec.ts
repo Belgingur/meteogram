@@ -358,6 +358,24 @@ test.describe("mobile @mobile", () => {
     expect(end).toBeLessThanOrEqual(view.left + view.width);
   });
 
+  test("decimals follow the language, and change with it", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openFixture(page);
+
+    const mobile = page.locator("#mobile-full");
+    const rain = mobile.locator(".h-precip").filter({ hasText: /\d/ }).first();
+    await expect(rain).toHaveText(/^\d+\.\d$/);
+
+    await mobile.evaluate((el) => el.setAttribute("language", "is"));
+    await expect(rain).toHaveText(/^\d+,\d$/);
+    await mobile.locator(".tab[data-view='graph']").click();
+    const slider = mobile.locator(".graph-host .scroll[role='slider']");
+    await expect(slider).toHaveAttribute("aria-valuetext", /, \d+,\d mm, /);
+
+    await mobile.evaluate((el) => el.setAttribute("language", "en"));
+    await expect(slider).toHaveAttribute("aria-valuetext", /, \d+\.\d mm, /);
+  });
+
   test("picking a day keeps that chip in view and focused", async ({
     page,
   }) => {

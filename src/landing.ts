@@ -1,6 +1,6 @@
 import { DATA_COLORS } from "./colors";
 import { arrowSvg, windText } from "./graph-card";
-import { LANGS, type Labels } from "./i18n";
+import { formatDecimal, LANGS, type Labels } from "./i18n";
 import { esc, tempColor } from "./render";
 import { symbolUrl } from "./symbols";
 import type { HourPoint } from "./types";
@@ -27,10 +27,10 @@ export interface Place {
   distanceKm?: number;
 }
 
-/** "12 km" / "340 km" — coarse enough not to imply false precision. */
-export function distanceLabel(km: number): string {
+/** "2.1 km" / "340 km" — coarse enough not to imply false precision. */
+export function distanceLabel(km: number, t: Labels): string {
   if (!Number.isFinite(km)) return "";
-  if (km < 10) return `${km.toFixed(1)} km`;
+  if (km < 10) return `${formatDecimal(km, 1, t)} km`;
   return `${Math.round(km)} km`;
 }
 
@@ -62,7 +62,7 @@ export interface DayGroup {
 export function coordLabel(lat: number, lon: number, t: Labels): string {
   const ns = lat < 0 ? "S" : "N";
   const ew = t.compass[lon < 0 ? 6 : 2]; // V/W or A/E
-  return `${Math.abs(lat).toFixed(2)}°${ns} ${Math.abs(lon).toFixed(2)}°${ew}`;
+  return `${formatDecimal(Math.abs(lat), 2, t)}°${ns} ${formatDecimal(Math.abs(lon), 2, t)}°${ew}`;
 }
 
 /** Where the panel's title came from. Only "coordinates" is not a place's name. */
@@ -243,7 +243,7 @@ export function nowCardHtml(
         </div>
         <div class="stat">
           <div class="stat-label">${esc(t.precip)}</div>
-          <div class="stat-value" style="color:${DATA_COLORS.precipText}">${p.precipMm.toFixed(1)} mm</div>
+          <div class="stat-value" style="color:${DATA_COLORS.precipText}">${formatDecimal(p.precipMm, 1, t)} mm</div>
         </div>
         <div class="stat stat--wind-card">
           <div class="stat-label">${esc(t.wind)}</div>
@@ -272,12 +272,12 @@ function tempRange(maxC: number | null, minC: number | null, sep = " / "): strin
 }
 
 /** The five cells of an hourly row (time · icon · temp · precip · wind) */
-function hourCells(p: HourPoint, iconSize: number): string {
+function hourCells(p: HourPoint, iconSize: number, t: Labels): string {
   return (
     `<span class="h-time">${String(p.local.getUTCHours()).padStart(2, "0")}</span>` +
     `<span class="h-icon">${symbolImg(p.symbol, iconSize)}</span>` +
     `<span class="h-temp" style="color:${p.tempC === null ? DATA_COLORS.none : tempColor(Math.round(p.tempC))}">${p.tempC === null ? "–" : `${Math.round(p.tempC)}°`}</span>` +
-    `<span class="h-precip">${p.precipMm > 0.05 ? p.precipMm.toFixed(1) : "–"}</span>` +
+    `<span class="h-precip">${p.precipMm > 0.05 ? formatDecimal(p.precipMm, 1, t) : "–"}</span>` +
     `<span class="h-wind">${esc(windText(p))} ${arrowSvg(p.dirDeg, 14, DATA_COLORS.neutral)}</span>`
   );
 }
@@ -456,7 +456,7 @@ export function stationPlaceNoteHtml(
 ): string {
   const name = place?.trim();
   if (!name || !Number.isFinite(km) || km < 0) return "";
-  return `<div class="loc-note">${esc(t.stationPlace(name, km.toFixed(1)))}</div>`;
+  return `<div class="loc-note">${esc(t.stationPlace(name, formatDecimal(km, 1, t)))}</div>`;
 }
 
 /** Analysis / last-update line below table or graph. */
@@ -505,7 +505,7 @@ function dayStatsHtml(d: DayGroup, t: Labels): string {
   const stat = (label: string, value: string): string =>
     `<div class="sel-stat"><span class="sel-stat-label">${esc(label)}</span><span class="sel-stat-value">${value}</span></div>`;
   const range = tempRange(d.maxC, d.minC, " / ");
-  const rain = d.precipMm > 0.05 ? `${d.precipMm.toFixed(1)} mm` : "–";
+  const rain = d.precipMm > 0.05 ? `${formatDecimal(d.precipMm, 1, t)} mm` : "–";
   const wind = d.windMean === null ? "–" : `${d.windMean} m/s`;
   return `
         <div class="sel-stats">
@@ -519,7 +519,7 @@ function dayStatsHtml(d: DayGroup, t: Labels): string {
 export function selDayCardHtml(d: DayGroup, t: Labels): string {
   const nowRow = nowRowMarker(d.hours);
   const rows = d.hours
-    .map((p) => `<div class="hrow${nowRow(p)}">${hourCells(p, 24)}</div>`)
+    .map((p) => `<div class="hrow${nowRow(p)}">${hourCells(p, 24, t)}</div>`)
     .join("");
   return `
     <div class="sel-card">
@@ -538,7 +538,7 @@ export function selDayCardHtml(d: DayGroup, t: Labels): string {
 export function panelTableHtml(d: DayGroup, t: Labels): string {
   const nowRow = nowRowMarker(d.hours);
   const rows = d.hours
-    .map((p) => `<div class="hrow-p${nowRow(p)}">${hourCells(p, 22)}</div>`)
+    .map((p) => `<div class="hrow-p${nowRow(p)}">${hourCells(p, 22, t)}</div>`)
     .join("");
   // The same day summary the phone card carries. It was mobile-only before, so
   // the two tables disagreed about whether a day has a headline at all.
@@ -603,7 +603,7 @@ export function stationRowsHtml(
       const dist =
         p.distanceKm === undefined
           ? ""
-          : `<span class="station-dist">${esc(distanceLabel(p.distanceKm))}</span>`;
+          : `<span class="station-dist">${esc(distanceLabel(p.distanceKm, t))}</span>`;
       return `
       <button class="station${sel ? " sel" : ""}" type="button" data-station="${i}">
         <span class="station-name">${esc(p.name)}${sel ? ` ${check}` : ""}</span>
