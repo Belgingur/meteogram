@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { labels } from "../src/i18n";
-import { locationSubHtml, placeTitle, type Place } from "../src/landing";
+import { chipPlace, locationSubHtml, panelSummary, placeTitle, type Place } from "../src/landing";
 
 const t = labels("en");
 const places: Place[] = [
@@ -90,5 +90,33 @@ describe("locationSubHtml", () => {
 
   it("shows no coordinates without a point", () => {
     expect(locationSubHtml(NaN, point.lon, "station", badge, t)).toBe(badge);
+  });
+});
+
+describe("the header chip's place", () => {
+  const chip = (place: string) =>
+    panelSummary({ modelName: "BEL-IS_EC", place, lang: "EN", tzOffsetMin: 0 });
+
+  it("leaves the place out when the title is the point's coordinates", () => {
+    const title = placeTitle({ ...base, preferCoordinates: true });
+    expect(title.source).toBe("coordinates");
+    expect(chip(chipPlace(title, true))).toBe("BEL-IS_EC · EN · UTC");
+  });
+
+  it("keeps a place's name, from every source of one", () => {
+    for (const opts of [
+      { locationName: "Reykjavík" },
+      { pickedName: "Keflavíkurflugvöllur" },
+      { preferCoordinates: false },
+    ]) {
+      const title = placeTitle({ ...base, ...opts });
+      expect(title.source).not.toBe("coordinates");
+      expect(chip(chipPlace(title, true))).toBe(`BEL-IS_EC · ${title.name} · EN · UTC`);
+    }
+  });
+
+  it("keeps the coordinates where the title isn't shown (the landscape sheet)", () => {
+    const title = placeTitle({ ...base, preferCoordinates: true });
+    expect(chip(chipPlace(title, false))).toBe("BEL-IS_EC · 64.18°N 21.85°W · EN · UTC");
   });
 });

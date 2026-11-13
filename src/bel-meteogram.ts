@@ -34,6 +34,7 @@ import {
   nowCardHtml,
   overlayHtml,
   panelSummary,
+  chipPlace,
   panelTableHtml,
   pillHtml,
   placeTitle,
@@ -1311,7 +1312,8 @@ export class BelMeteogram extends HTMLElement {
 
     const summary = panelSummary({
       modelName: model?.name ?? "…",
-      place,
+      // The landscape sheet hides the title block; elsewhere the title names it.
+      place: chipPlace(title, !landscape),
       lang: lang.toUpperCase(),
       tzOffsetMin: this.tzOffsetMin,
     });
