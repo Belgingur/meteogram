@@ -1517,3 +1517,32 @@ test.describe("selected-time in a non-UTC browser", () => {
     expect(await timeEvents(page)).toHaveLength(1);
   });
 });
+
+test.describe("openSearch() @mobile", () => {
+  test("opens the settings dialog at the search, focused only with a fine pointer", async ({
+    page,
+    isMobile,
+  }) => {
+    await page.setViewportSize(isMobile ? { width: 390, height: 844 } : { width: 1280, height: 900 });
+    await openFixture(page);
+
+    const widget = page.locator(isMobile ? "#mobile-full" : "#desktop-panel");
+    await expect(widget.locator(".overlay")).toHaveCount(0);
+    await widget.evaluate((el) => (el as HTMLElement & { openSearch(): void }).openSearch());
+
+    const dialog = widget.locator(".overlay[role='dialog']");
+    await expect(dialog).toBeVisible();
+    await expect(isMobile ? dialog : widget.locator(".station-search")).toBeFocused();
+    if (!isMobile) {
+      await page.keyboard.type("Ak");
+      await expect(widget.locator(".station-search")).toHaveValue("Ak");
+    }
+  });
+
+  test("does nothing in graph mode, which has no dialog", async ({ page }) => {
+    await openFixture(page);
+    const card = page.locator("#graph-card");
+    await card.evaluate((el) => (el as HTMLElement & { openSearch(): void }).openSearch());
+    await expect(card.locator(".overlay")).toHaveCount(0);
+  });
+});

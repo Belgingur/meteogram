@@ -374,6 +374,15 @@ export function formatUtcOffset(
  * middot.
  */
 /**
+ * Where focus goes when the settings dialog opens for a search: the search
+ * field with a fine pointer, the dialog itself otherwise, so a phone's
+ * keyboard doesn't jump up over the dialog.
+ */
+export function searchFocusSelector(finePointer: boolean): string {
+  return finePointer ? ".station-search" : ".overlay";
+}
+
+/**
  * The place in the header chip. Under a title that is the point's coordinates
  * the chip would repeat them, so it leaves the place out. The phone's landscape
  * sheet hides the title, so there the chip keeps the place, coordinates and all.
